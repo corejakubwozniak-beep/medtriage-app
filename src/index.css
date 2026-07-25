@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-sage-50 text-ink-900 font-sans antialiased;
+    background-image:
+      radial-gradient(at 0% 0%, rgba(121, 171, 140, 0.10) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(37, 194, 196, 0.08) 0px, transparent 45%),
+      radial-gradient(at 50% 100%, rgba(189, 154, 90, 0.06) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
