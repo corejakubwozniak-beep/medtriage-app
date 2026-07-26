@@ -20,6 +20,7 @@ import {
   Zap,
   Upload,
   Trash2,
+  Download,
 } from 'lucide-react';
 
 type AnalysisResult = {
@@ -128,7 +129,6 @@ function App() {
   const [result, setResult] = useState<AnalysisResult | null>(CARDIAC_RESULT);
   const [bookedFacility, setBookedFacility] = useState<Facility | null>(null);
 
-  // Stany dla obsługi pliku/zdjęcia
   const [imageFile, setImageFile] = useState<{ base64: string; mimeType: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
@@ -168,10 +168,8 @@ function App() {
     }, 150);
 
     try {
-      // Zapytanie do Gemini ze zdjęciem i tekstem
       const rawAiResult = await analyzeSymptomsWithGemini(symptoms, imageFile);
 
-      // Bezpieczne mapowanie odpowiedzi Gemini na interfejs UI
       const mappedResult: AnalysisResult = {
         direction: rawAiResult.direction || 'Diagnostyka Ogólna',
         directionNote: rawAiResult.explanation || 'Przeanalizowano opisane objawy oraz załączone materiały.',
@@ -194,10 +192,11 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen">
-      <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14">
-        {/* Header */}
-        <header className="animate-fade-up">
+    <div className="min-h-screen print:bg-white print:py-0">
+      <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14 print:px-0 print:py-0 print:max-w-none">
+        
+        {/* Header - Ukryty w PDF */}
+        <header className="animate-fade-up print:hidden">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sage-400 to-teal-500 text-white shadow-soft">
               <Stethoscope className="h-6 w-6" strokeWidth={2.2} />
@@ -217,8 +216,8 @@ function App() {
           </p>
         </header>
 
-        {/* Disclaimer banner */}
-        <div className="mt-6 flex items-start gap-3 rounded-2xl border border-sand-200 bg-sand-50/70 px-4 py-3.5 animate-fade-up" style={{ animationDelay: '0.05s' }}>
+        {/* Disclaimer banner - Ukryty w PDF */}
+        <div className="mt-6 flex items-start gap-3 rounded-2xl border border-sand-200 bg-sand-50/70 px-4 py-3.5 animate-fade-up print:hidden" style={{ animationDelay: '0.05s' }}>
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-sand-500" />
           <p className="text-[0.82rem] leading-relaxed text-ink-700">
             Wynik ma charakter informacyjny. W przypadku nagłych lub nasilonych objawów
@@ -226,8 +225,8 @@ function App() {
           </p>
         </div>
 
-        {/* Form */}
-        <section className="mt-7 animate-fade-up" style={{ animationDelay: '0.1s' }}>
+        {/* Form - Ukryty w PDF */}
+        <section className="mt-7 animate-fade-up print:hidden" style={{ animationDelay: '0.1s' }}>
           <form
             onSubmit={handleSubmit}
             className="rounded-3xl border border-ink-100 bg-white/80 p-6 shadow-card backdrop-blur-sm sm:p-7"
@@ -250,7 +249,7 @@ function App() {
               className="mt-4 w-full resize-none rounded-2xl border border-ink-200 bg-sage-50/40 px-4 py-3.5 text-[0.95rem] text-ink-900 placeholder:text-ink-400 transition-all duration-200 focus:border-sage-400 focus:outline-none focus:ring-4 focus:ring-sage-400/15"
             />
 
-            {/* SEKCJA WGRYWANIA ZDJĘCIA */}
+            {/* ZDJĘCIE */}
             <div className="mt-4">
               {!imagePreview ? (
                 <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-ink-200 bg-sage-50/30 px-4 py-3 text-xs font-semibold text-ink-600 transition-all duration-200 hover:border-sage-300 hover:bg-sage-50/80">
@@ -323,9 +322,9 @@ function App() {
         </section>
 
         {/* Result card */}
-        <section className="mt-7">
+        <section className="mt-7 print:mt-0">
           {loading && (
-            <div className="flex items-center justify-center gap-3 rounded-3xl border border-ink-100 bg-white/70 py-16 shadow-card animate-fade-in">
+            <div className="flex items-center justify-center gap-3 rounded-3xl border border-ink-100 bg-white/70 py-16 shadow-card animate-fade-in print:hidden">
               <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-sage-200 border-t-sage-500" />
               <span className="text-sm font-medium text-ink-500">
                 Przygotowuję sugestię triażową z AI...
@@ -334,26 +333,44 @@ function App() {
           )}
 
           {!loading && result && (
-            <div className="overflow-hidden rounded-3xl border border-ink-100 bg-white/85 shadow-card backdrop-blur-sm animate-fade-up">
+            <div className="overflow-hidden rounded-3xl border border-ink-100 bg-white/85 shadow-card backdrop-blur-sm animate-fade-up print:border-none print:shadow-none print:bg-white print:rounded-none">
+              
+              {/* Sekcja widoczna TYLKO na wydruku PDF (ukryta na ekranie) */}
+              <div className="hidden print:block mb-8 border-b border-ink-100 pb-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Stethoscope className="h-8 w-8 text-sage-600" />
+                  <h1 className="text-2xl font-bold text-ink-900">Raport Triażowy pacjenta - MedTriage</h1>
+                </div>
+                <p className="text-sm text-ink-600"><strong>Data analizy:</strong> {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
+                
+                {(symptoms || imagePreview) && (
+                  <div className="mt-6 p-4 bg-sage-50 rounded-xl">
+                    <p className="text-sm font-bold text-ink-900 mb-1">Dane wejściowe przekazane do analizy:</p>
+                    {symptoms && <p className="text-sm text-ink-800 whitespace-pre-wrap">{symptoms}</p>}
+                    {imagePreview && <p className="text-sm text-ink-500 mt-2 italic">[Załączono plik graficzny z wynikami / zmianą]</p>}
+                  </div>
+                )}
+              </div>
+
               {/* Card header */}
-              <div className="flex items-center justify-between gap-3 border-b border-ink-100 bg-gradient-to-r from-sage-50 to-teal-50/60 px-6 py-5 sm:px-7">
+              <div className="flex items-center justify-between gap-3 border-b border-ink-100 bg-gradient-to-r from-sage-50 to-teal-50/60 px-6 py-5 sm:px-7 print:bg-none print:px-0">
                 <div className="flex items-center gap-2.5">
-                  <ShieldCheck className="h-5 w-5 text-sage-600" />
+                  <ShieldCheck className="h-5 w-5 text-sage-600 print:text-ink-900" />
                   <h3 className="text-base font-semibold text-ink-900">
                     Wynik analizy triażowej AI
                   </h3>
                 </div>
                 <span
-                  className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${URGENCY_STYLES[result.urgency]}`}
+                  className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold print:border-ink-200 print:text-ink-900 ${URGENCY_STYLES[result.urgency]}`}
                 >
                   Priorytet: {result.urgency}
                 </span>
               </div>
 
-              <div className="grid gap-px bg-ink-100 sm:grid-cols-2">
+              <div className="grid gap-px bg-ink-100 sm:grid-cols-2 print:grid-cols-2 print:bg-ink-200 print:border-b print:border-ink-200">
                 {/* Suggested direction */}
-                <div className="bg-white p-6 sm:p-7">
-                  <div className="flex items-center gap-2.5 text-sage-600">
+                <div className="bg-white p-6 sm:p-7 print:p-4">
+                  <div className="flex items-center gap-2.5 text-sage-600 print:text-ink-500">
                     <Compass className="h-4.5 w-4.5" />
                     <span className="text-[0.72rem] font-semibold uppercase tracking-wider">
                       Sugerowany kierunek
@@ -368,8 +385,8 @@ function App() {
                 </div>
 
                 {/* Recommended specialist */}
-                <div className="bg-white p-6 sm:p-7">
-                  <div className="flex items-center gap-2.5 text-teal-600">
+                <div className="bg-white p-6 sm:p-7 print:p-4">
+                  <div className="flex items-center gap-2.5 text-teal-600 print:text-ink-500">
                     <UserRound className="h-4.5 w-4.5" />
                     <span className="text-[0.72rem] font-semibold uppercase tracking-wider">
                       Rekomendowany specjalista
@@ -385,21 +402,22 @@ function App() {
               </div>
 
               {/* Recommended tests */}
-              <div className="border-t border-ink-100 bg-white p-6 sm:p-7">
-                <div className="flex items-center gap-2.5 text-sand-500">
+              <div className="border-t border-ink-100 bg-white p-6 sm:p-7 print:border-none print:px-0">
+                <div className="flex items-center gap-2.5 text-sand-500 print:text-ink-500">
                   <FlaskConical className="h-4.5 w-4.5" />
                   <span className="text-[0.72rem] font-semibold uppercase tracking-wider">
                     Zalecane badania wstępne
                   </span>
                 </div>
-                <ul className="mt-3.5 grid gap-2.5 sm:grid-cols-2">
+                <ul className="mt-3.5 grid gap-2.5 sm:grid-cols-2 print:grid-cols-1">
                   {result.tests.map((test) => (
                     <li
                       key={test}
-                      className="group flex items-center gap-3 rounded-xl border border-ink-100 bg-sage-50/40 px-4 py-3 transition-colors duration-200 hover:border-sage-200 hover:bg-sage-50"
+                      className="group flex items-center gap-3 rounded-xl border border-ink-100 bg-sage-50/40 px-4 py-3 print:border-none print:bg-transparent print:p-1"
                     >
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sage-100 text-sage-600">
-                        <ChevronRight className="h-3.5 w-3.5" />
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sage-100 text-sage-600 print:bg-transparent print:w-4">
+                        <ChevronRight className="h-3.5 w-3.5 print:hidden" />
+                        <span className="hidden print:inline-block font-bold text-ink-900">•</span>
                       </span>
                       <span className="text-sm font-medium text-ink-800">
                         {test}
@@ -409,20 +427,32 @@ function App() {
                 </ul>
               </div>
 
+              {/* PRZYCISK PDF (Ukryty na wydruku) */}
+              <div className="border-t border-ink-100 bg-white p-6 sm:px-7 print:hidden flex justify-center">
+                <button
+                  onClick={() => window.print()}
+                  className="group inline-flex items-center gap-2.5 rounded-2xl bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:bg-ink-800 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-ink-900/20"
+                >
+                  <Download className="h-4.5 w-4.5 transition-transform group-hover:-translate-y-0.5" />
+                  Pobierz raport dla lekarza (PDF)
+                </button>
+              </div>
+
               {/* Footer note */}
-              <div className="border-t border-ink-100 bg-sage-50/50 px-6 py-4 sm:px-7">
+              <div className="border-t border-ink-100 bg-sage-50/50 px-6 py-4 sm:px-7 print:bg-white print:px-0 print:mt-10">
                 <p className="flex items-start gap-2 text-[0.78rem] leading-relaxed text-ink-500">
                   <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-400" />
-                  Sugestia została wygenerowana przez Gemini AI na podstawie przesłanych materiałów.
+                  Raport wygenerowany przez asystenta sztucznej inteligencji MedTriage na podstawie przekazanych danych. 
+                  Dokument ma charakter informacyjny, wspomagający proces diagnostyczny i nie zastępuje profesjonalnej diagnozy lekarskiej.
                 </p>
               </div>
             </div>
           )}
         </section>
 
-        {/* Nearest available slots */}
+        {/* Nearest available slots - Ukryte w PDF */}
         {!loading && result && (
-          <section className="mt-7 animate-fade-up">
+          <section className="mt-7 animate-fade-up print:hidden">
             <div className="mb-4 flex items-center gap-2.5">
               <CalendarClock className="h-5 w-5 text-teal-600" />
               <h2 className="text-base font-semibold text-ink-900">
@@ -498,69 +528,8 @@ function App() {
           </section>
         )}
 
-        {/* Booking confirmation modal */}
-        {bookedFacility && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-5 backdrop-blur-sm animate-fade-in"
-            onClick={() => setBookedFacility(null)}
-          >
-            <div
-              className="relative w-full max-w-md rounded-3xl border border-ink-100 bg-white p-7 shadow-card animate-fade-up"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={() => setBookedFacility(null)}
-                className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-ink-400 transition-colors hover:bg-ink-50 hover:text-ink-700"
-                aria-label="Zamknij"
-              >
-                <X className="h-5 w-5" />
-              </button>
-
-              <div className="flex flex-col items-center text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-sage-100 text-sage-600">
-                  <CheckCircle2 className="h-9 w-9" strokeWidth={2} />
-                </div>
-                <h3 className="mt-5 text-xl font-bold text-ink-900">
-                  Rezerwacja potwierdzona!
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-ink-600">
-                  Wyniki badania zostaną automatycznie przesłane do analizy AI.
-                </p>
-
-                <div className="mt-5 w-full rounded-2xl border border-ink-100 bg-sage-50/50 px-4 py-3.5 text-left">
-                  <div className="flex items-center gap-2.5">
-                    <Building2 className="h-4 w-4 shrink-0 text-sage-600" />
-                    <p className="text-sm font-semibold text-ink-900">
-                      {bookedFacility.name}
-                    </p>
-                  </div>
-                  <div className="mt-2 flex items-center gap-2.5">
-                    <CalendarClock className="h-4 w-4 shrink-0 text-teal-600" />
-                    <p className="text-sm text-ink-700">
-                      {bookedFacility.earliestSlot}
-                    </p>
-                  </div>
-                  <div className="mt-2 flex items-center gap-2.5">
-                    <UserRound className="h-4 w-4 shrink-0 text-ink-500" />
-                    <p className="text-sm text-ink-700">
-                      {bookedFacility.doctor}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setBookedFacility(null)}
-                  className="mt-6 w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:from-sage-600 hover:to-teal-600 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-sage-400/25"
-                >
-                  Gotowe
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Footer */}
-        <footer className="mt-10 text-center">
+        {/* Footer - Ukryty w PDF */}
+        <footer className="mt-10 text-center print:hidden">
           <p className="text-xs text-ink-400">
             MedTriage · Asystent wsparcia diagnostycznego · Nie jest urządzeniem medycznym
           </p>
