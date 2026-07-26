@@ -37,7 +37,7 @@ function App() {
   const [imageFile, setImageFile] = useState<{ base64: string; mimeType: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  const [facilities, setFacilities] = useState<Facility[]>(GENERAL_FACILITIES);
+  const [facilities, setFacilities] = useState<Facility[]>([]);
 
   // Pobieranie placówek z bazy Supabase
   useEffect(() => {
