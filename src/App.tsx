@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { analyzeSymptomsWithGemini } from './gemini';
+import { CARDIAC_RESULT, CARDIAC_FACILITIES, GENERAL_FACILITIES, URGENCY_STYLES } from './data';
+import { AnalysisResult, Facility, HistoryItem } from './types';
 import {
   Stethoscope,
   Activity,
@@ -24,109 +26,6 @@ import {
   Clock,
 } from 'lucide-react';
 
-type AnalysisResult = {
-  direction: string;
-  directionNote: string;
-  specialist: string;
-  specialistNote: string;
-  tests: string[];
-  urgency: 'Planowy' | 'Standardowy' | 'Pilny';
-};
-
-// Nowy typ dla historii
-type HistoryItem = {
-  id: string;
-  date: string;
-  symptoms: string;
-  hasImage: boolean;
-  result: AnalysisResult;
-};
-
-const CARDIAC_RESULT: AnalysisResult = {
-  direction: 'Kardiologia',
-  directionNote:
-    'Opisane objawy mogą wskazywać na krążeniowe podłoże dolegliwości. Zalecana konsultacja w kierunku chorób serca i naczyń.',
-  specialist: 'Kardiolog',
-  specialistNote:
-    'Specjalista oceni ryzyko sercowo-naczyniowe i zleci odpowiedni panel diagnostyczny.',
-  tests: [
-    'EKG spoczynkowe (12 odprowadzeń)',
-    'Echokardiografia serca',
-    'Morfologia krwi + lipidogram',
-    'Troponina wysokoczuła',
-  ],
-  urgency: 'Standardowy',
-};
-
-const GENERAL_RESULT: AnalysisResult = {
-  direction: 'Diagnostyka ogólna',
-  directionNote:
-    'Opisane objawy nie wskazują jednoznacznie na konkretną dziedzinę. Zalecana szeroka diagnostyka wstępna u lekarza pierwszego kontaktu.',
-  specialist: 'Lekarz rodzinny',
-  specialistNote:
-    'Lekarz pierwszego kontaktu zbierze wywiad, zleci badania wstępne i w razie potrzeby skieruje do specjalisty.',
-  tests: [
-    'Morfologia krwi',
-    'CRP / OB',
-    'Badanie ogólne moczu',
-    'Glukoza na czczo',
-  ],
-  urgency: 'Planowy',
-};
-
-const URGENCY_STYLES: Record<AnalysisResult['urgency'], string> = {
-  Planowy: 'bg-sage-100 text-sage-700 border-sage-200',
-  Standardowy: 'bg-teal-50 text-teal-700 border-teal-200',
-  Pilny: 'bg-sand-100 text-sand-500 border-sand-200',
-};
-
-type Facility = {
-  name: string;
-  address: string;
-  earliestSlot: string;
-  isFastest: boolean;
-  doctor: string;
-  rating: number;
-};
-
-const CARDIAC_FACILITIES: Facility[] = [
-  {
-    name: 'Klinika Kardiologiczna ProMed',
-    address: 'ul. Kardiologiczna 12, Warszawa',
-    earliestSlot: 'Dziś, godz. 16:30',
-    isFastest: true,
-    doctor: 'dr n. med. Jan Kowalski',
-    rating: 4.9,
-  },
-  {
-    name: 'Centrum Medyczne Diagnostyka+',
-    address: 'al. Niepodległości 220, Warszawa',
-    earliestSlot: 'Jutro, godz. 09:00',
-    isFastest: false,
-    doctor: 'dr Anna Wiśniewska',
-    rating: 4.7,
-  },
-];
-
-const GENERAL_FACILITIES: Facility[] = [
-  {
-    name: 'Centrum Medyczne Diagnostyka+',
-    address: 'al. Niepodległości 220, Warszawa',
-    earliestSlot: 'Dziś, godz. 17:15',
-    isFastest: true,
-    doctor: 'dr Piotr Nowak',
-    rating: 4.8,
-  },
-  {
-    name: 'Przychodnia Rodzinna Zdrowie',
-    address: 'ul. Słoneczna 5, Warszawa',
-    earliestSlot: 'Jutro, godz. 10:30',
-    isFastest: false,
-    doctor: 'dr Maria Lewandowska',
-    rating: 4.6,
-  },
-];
-
 function facilitiesForResult(result: AnalysisResult | null): Facility[] {
   if (!result) return [];
   return result.direction === 'Kardiologia' ? CARDIAC_FACILITIES : GENERAL_FACILITIES;
@@ -142,7 +41,6 @@ function App() {
   const [imageFile, setImageFile] = useState<{ base64: string; mimeType: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  // Inicjalizacja historii z localStorage
   const [history, setHistory] = useState<HistoryItem[]>(() => {
     const saved = localStorage.getItem('medtriage_history');
     return saved ? JSON.parse(saved) : [];
@@ -213,7 +111,6 @@ function App() {
       setProgress(100);
       setResult(mappedResult);
 
-      // Zapisywanie do historii i localStorage (max 10 elementów)
       const newItem: HistoryItem = {
         id: Date.now().toString(),
         date: new Date().toLocaleString(),
@@ -238,7 +135,7 @@ function App() {
     <div className="min-h-screen print:bg-white print:py-0">
       <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14 print:px-0 print:py-0 print:max-w-none">
         
-        {/* Header - Ukryty w PDF */}
+        {/* Header */}
         <header className="animate-fade-up print:hidden">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sage-400 to-teal-500 text-white shadow-soft">
@@ -259,7 +156,7 @@ function App() {
           </p>
         </header>
 
-        {/* Disclaimer banner - Ukryty w PDF */}
+        {/* Disclaimer banner */}
         <div className="mt-6 flex items-start gap-3 rounded-2xl border border-sand-200 bg-sand-50/70 px-4 py-3.5 animate-fade-up print:hidden" style={{ animationDelay: '0.05s' }}>
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-sand-500" />
           <p className="text-[0.82rem] leading-relaxed text-ink-700">
@@ -268,7 +165,7 @@ function App() {
           </p>
         </div>
 
-        {/* Form - Ukryty w PDF */}
+        {/* Form */}
         <section className="mt-7 animate-fade-up print:hidden" style={{ animationDelay: '0.1s' }}>
           <form
             onSubmit={handleSubmit}
@@ -292,7 +189,6 @@ function App() {
               className="mt-4 w-full resize-none rounded-2xl border border-ink-200 bg-sage-50/40 px-4 py-3.5 text-[0.95rem] text-ink-900 placeholder:text-ink-400 transition-all duration-200 focus:border-sage-400 focus:outline-none focus:ring-4 focus:ring-sage-400/15"
             />
 
-            {/* ZDJĘCIE */}
             <div className="mt-4">
               {!imagePreview ? (
                 <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-ink-200 bg-sage-50/30 px-4 py-3 text-xs font-semibold text-ink-600 transition-all duration-200 hover:border-sage-300 hover:bg-sage-50/80">
@@ -378,7 +274,6 @@ function App() {
           {!loading && result && (
             <div className="overflow-hidden rounded-3xl border border-ink-100 bg-white/85 shadow-card backdrop-blur-sm animate-fade-up print:border-none print:shadow-none print:bg-white print:rounded-none">
               
-              {/* Sekcja widoczna TYLKO na wydruku PDF (ukryta na ekranie) */}
               <div className="hidden print:block mb-8 border-b border-ink-100 pb-6">
                 <div className="flex items-center gap-3 mb-4">
                   <Stethoscope className="h-8 w-8 text-sage-600" />
@@ -395,7 +290,6 @@ function App() {
                 )}
               </div>
 
-              {/* Card header */}
               <div className="flex items-center justify-between gap-3 border-b border-ink-100 bg-gradient-to-r from-sage-50 to-teal-50/60 px-6 py-5 sm:px-7 print:bg-none print:px-0">
                 <div className="flex items-center gap-2.5">
                   <ShieldCheck className="h-5 w-5 text-sage-600 print:text-ink-900" />
@@ -411,7 +305,6 @@ function App() {
               </div>
 
               <div className="grid gap-px bg-ink-100 sm:grid-cols-2 print:grid-cols-2 print:bg-ink-200 print:border-b print:border-ink-200">
-                {/* Suggested direction */}
                 <div className="bg-white p-6 sm:p-7 print:p-4">
                   <div className="flex items-center gap-2.5 text-sage-600 print:text-ink-500">
                     <Compass className="h-4.5 w-4.5" />
@@ -427,7 +320,6 @@ function App() {
                   </p>
                 </div>
 
-                {/* Recommended specialist */}
                 <div className="bg-white p-6 sm:p-7 print:p-4">
                   <div className="flex items-center gap-2.5 text-teal-600 print:text-ink-500">
                     <UserRound className="h-4.5 w-4.5" />
@@ -444,7 +336,6 @@ function App() {
                 </div>
               </div>
 
-              {/* Recommended tests */}
               <div className="border-t border-ink-100 bg-white p-6 sm:p-7 print:border-none print:px-0">
                 <div className="flex items-center gap-2.5 text-sand-500 print:text-ink-500">
                   <FlaskConical className="h-4.5 w-4.5" />
@@ -470,7 +361,6 @@ function App() {
                 </ul>
               </div>
 
-              {/* PRZYCISK PDF (Ukryty na wydruku) */}
               <div className="border-t border-ink-100 bg-white p-6 sm:px-7 print:hidden flex justify-center">
                 <button
                   onClick={() => window.print()}
@@ -481,7 +371,6 @@ function App() {
                 </button>
               </div>
 
-              {/* Footer note */}
               <div className="border-t border-ink-100 bg-sage-50/50 px-6 py-4 sm:px-7 print:bg-white print:px-0 print:mt-10">
                 <p className="flex items-start gap-2 text-[0.78rem] leading-relaxed text-ink-500">
                   <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-400" />
@@ -493,7 +382,7 @@ function App() {
           )}
         </section>
 
-        {/* Nearest available slots - Ukryte w PDF */}
+        {/* Nearest available slots */}
         {!loading && result && (
           <section className="mt-7 animate-fade-up print:hidden">
             <div className="mb-4 flex items-center gap-2.5">
@@ -571,7 +460,7 @@ function App() {
           </section>
         )}
 
-        {/* SEKCJA HISTORII - Ukryta w PDF */}
+        {/* History section */}
         {history.length > 0 && (
           <section className="mt-12 animate-fade-up print:hidden">
             <div className="mb-5 flex items-center justify-between gap-4">
@@ -623,7 +512,7 @@ function App() {
           </section>
         )}
 
-        {/* Booking confirmation modal */}
+        {/* Booking modal */}
         {bookedFacility && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-5 backdrop-blur-sm animate-fade-in"
@@ -674,7 +563,7 @@ function App() {
                 </div>
 
                 <button
-                  onClick={() => setBookedFacility(null)}
+                  onClick={() => setBookedFacility(name => null)}
                   className="mt-6 w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:from-sage-600 hover:to-teal-600 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-sage-400/25"
                 >
                   Gotowe
@@ -684,7 +573,7 @@ function App() {
           </div>
         )}
 
-        {/* Footer - Ukryty w PDF */}
+        {/* Footer */}
         <footer className="mt-10 text-center print:hidden">
           <p className="text-xs text-ink-400">
             MedTriage · Asystent wsparcia diagnostycznego · Nie jest urządzeniem medycznym
