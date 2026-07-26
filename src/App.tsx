@@ -18,6 +18,8 @@ import {
   CheckCircle2,
   X,
   Zap,
+  Upload,
+  Trash2,
 } from 'lucide-react';
 
 type AnalysisResult = {
@@ -60,24 +62,6 @@ const GENERAL_RESULT: AnalysisResult = {
   ],
   urgency: 'Planowy',
 };
-
-const CARDIAC_KEYWORDS = [
-  'ból w klatce piersiowej',
-  'klatka piersiowa',
-  'duszności',
-  'duszność',
-  'kołatanie serca',
-  'kołatanie',
-  'serce',
-  'klatkę piersiową',
-  'klatce piersiowej',
-];
-
-function analyzeSymptoms(input: string): AnalysisResult {
-  const normalized = input.toLowerCase();
-  const isCardiac = CARDIAC_KEYWORDS.some((kw) => normalized.includes(kw));
-  return isCardiac ? CARDIAC_RESULT : GENERAL_RESULT;
-}
 
 const URGENCY_STYLES: Record<AnalysisResult['urgency'], string> = {
   Planowy: 'bg-sage-100 text-sage-700 border-sage-200',
@@ -144,34 +128,70 @@ function App() {
   const [result, setResult] = useState<AnalysisResult | null>(CARDIAC_RESULT);
   const [bookedFacility, setBookedFacility] = useState<Facility | null>(null);
 
+  // Stany dla obsługi pliku/zdjęcia
+  const [imageFile, setImageFile] = useState<{ base64: string; mimeType: string } | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const resultStr = reader.result as string;
+      const base64Data = resultStr.split(',')[1];
+
+      setImageFile({
+        base64: base64Data,
+        mimeType: file.type,
+      });
+      setImagePreview(resultStr);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+  };
+
   const handleSubmit = async (e: FormEvent) => {
-  e.preventDefault();
-  if (!symptoms.trim() || loading) return;
+    e.preventDefault();
+    if ((!symptoms.trim() && !imageFile) || loading) return;
 
-  setLoading(true);
-  setProgress(10);
-  setResult(null);
+    setLoading(true);
+    setProgress(10);
+    setResult(null);
 
-  // Animacja paska postępu — powoli rośnie do 90%, czekając na odpowiedź z chmury
-  const interval = setInterval(() => {
-    setProgress((prev) => (prev >= 90 ? 90 : prev + 5));
-  }, 150);
+    const interval = setInterval(() => {
+      setProgress((prev) => (prev >= 90 ? 90 : prev + 5));
+    }, 150);
 
-  try {
-    // Prawdziwe zapytanie do darmowego AI Gemini
-    const aiResult = await analyzeSymptomsWithGemini(symptoms);
-    
-    // Gdy AI odpowie: pasek skacze do 100% i zapisujemy wynik
-    setProgress(100);
-    setResult(aiResult);
-  } catch (error) {
-    console.error("Błąd podczas analizy objawów:", error);
-  } finally {
-    // Czyszczenie timera i wyłączenie stanu ładowania (wykonuje się zawsze)
-    clearInterval(interval);
-    setLoading(false);
-  }
-};
+    try {
+      // Zapytanie do Gemini ze zdjęciem i tekstem
+      const rawAiResult = await analyzeSymptomsWithGemini(symptoms, imageFile);
+
+      // Bezpieczne mapowanie odpowiedzi Gemini na interfejs UI
+      const mappedResult: AnalysisResult = {
+        direction: rawAiResult.direction || 'Diagnostyka Ogólna',
+        directionNote: rawAiResult.explanation || 'Przeanalizowano opisane objawy oraz załączone materiały.',
+        specialist: rawAiResult.specialist || 'Lekarz Rodzinny',
+        specialistNote: `Sugerowana konsultacja: ${rawAiResult.specialist || 'Lekarz Rodzinny'}.`,
+        tests: rawAiResult.tests || rawAiResult.recommendedTests || ['Morfologia krwi', 'Badanie ogólne'],
+        urgency: (['Planowy', 'Standardowy', 'Pilny'].includes(rawAiResult.priority)
+          ? rawAiResult.priority
+          : 'Standardowy') as AnalysisResult['urgency'],
+      };
+
+      setProgress(100);
+      setResult(mappedResult);
+    } catch (error) {
+      console.error('Błąd podczas analizy objawów:', error);
+    } finally {
+      clearInterval(interval);
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen">
@@ -187,14 +207,13 @@ function App() {
                 MedTriage
               </h1>
               <p className="text-sm font-medium text-ink-500">
-                Inteligentny asystent triażowy
+                Inteligentny asystent triażowy AI
               </p>
             </div>
           </div>
           <p className="mt-5 max-w-2xl text-[0.95rem] leading-relaxed text-ink-600 text-balance">
-            Wpisz swoje objawy, a asystent zasugeruje możliwy kierunek diagnostyczny,
-            rekomendowanego specjalistę oraz badania wstępne. To narzędzie wsparcia
-            — nie zastępuje porady lekarskiej.
+            Wpisz swoje objawy lub załącz zdjęcie wyników badań / zmiany skórnej. Asystent zasugeruje kierunek diagnostyczny,
+            rekomendowanego specjalistę oraz badania wstępne.
           </p>
         </header>
 
@@ -216,11 +235,11 @@ function App() {
             <div className="flex items-center gap-2.5">
               <ClipboardList className="h-5 w-5 text-sage-500" />
               <h2 className="text-base font-semibold text-ink-900">
-                Opisz swoje objawy
+                Opisz swoje objawy lub dodaj zdjęcie
               </h2>
             </div>
             <p className="mt-1.5 text-sm text-ink-500">
-              Wpisz do 3 głównych dolegliwości, oddzielając je przecinkiem lub nową linijką.
+              Wpisz dolegliwości lub załącz plik z wynikami badań / zdjęciem.
             </p>
 
             <textarea
@@ -231,14 +250,53 @@ function App() {
               className="mt-4 w-full resize-none rounded-2xl border border-ink-200 bg-sage-50/40 px-4 py-3.5 text-[0.95rem] text-ink-900 placeholder:text-ink-400 transition-all duration-200 focus:border-sage-400 focus:outline-none focus:ring-4 focus:ring-sage-400/15"
             />
 
+            {/* SEKCJA WGRYWANIA ZDJĘCIA */}
+            <div className="mt-4">
+              {!imagePreview ? (
+                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-ink-200 bg-sage-50/30 px-4 py-3 text-xs font-semibold text-ink-600 transition-all duration-200 hover:border-sage-300 hover:bg-sage-50/80">
+                  <Upload className="h-4 w-4 text-sage-600" />
+                  <span>Dodaj zdjęcie wyników badań / wypisu / zmiany skórnej</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="hidden"
+                  />
+                </label>
+              ) : (
+                <div className="relative flex items-center justify-between rounded-2xl border border-sage-200 bg-sage-50/70 p-3">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <img
+                      src={imagePreview}
+                      alt="Podgląd"
+                      className="h-12 w-12 rounded-xl object-cover shadow-sm"
+                    />
+                    <span className="truncate text-xs font-semibold text-ink-800">
+                      Zdjęcie dołączone do analizy AI
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={removeImage}
+                    className="flex h-8 w-8 items-center justify-center rounded-xl text-ink-400 transition-colors hover:bg-white hover:text-sand-500"
+                    aria-label="Usuń zdjęcie"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="mt-5 flex flex-col-reverse items-center gap-3 sm:flex-row sm:justify-between">
               <span className="text-xs text-ink-400">
-                {symptoms.trim() ? 'Gotowe do analizy' : 'Wpisz co najmniej jeden objaw'}
+                {symptoms.trim() || imageFile
+                  ? 'Gotowe do analizy z AI'
+                  : 'Wpisz objawy lub załącz zdjęcie'}
               </span>
               <div className="w-full sm:w-auto">
                 <button
                   type="submit"
-                  disabled={!symptoms.trim() || loading}
+                  disabled={(!symptoms.trim() && !imageFile) || loading}
                   className="group relative inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-6 py-3.5 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:from-sage-600 hover:to-teal-600 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-sage-400/25 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none sm:w-auto"
                 >
                   {loading && (
@@ -250,7 +308,7 @@ function App() {
                   {loading ? (
                     <>
                       <Activity className="h-4 w-4 animate-pulse-soft" />
-                      Analizuję...
+                      Analizuję (Vision AI)...
                     </>
                   ) : (
                     <>
@@ -270,7 +328,7 @@ function App() {
             <div className="flex items-center justify-center gap-3 rounded-3xl border border-ink-100 bg-white/70 py-16 shadow-card animate-fade-in">
               <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-sage-200 border-t-sage-500" />
               <span className="text-sm font-medium text-ink-500">
-                Przygotowuję sugestię triażową...
+                Przygotowuję sugestię triażową z AI...
               </span>
             </div>
           )}
@@ -282,7 +340,7 @@ function App() {
                 <div className="flex items-center gap-2.5">
                   <ShieldCheck className="h-5 w-5 text-sage-600" />
                   <h3 className="text-base font-semibold text-ink-900">
-                    Wynik analizy triażowej
+                    Wynik analizy triażowej AI
                   </h3>
                 </div>
                 <span
@@ -355,8 +413,7 @@ function App() {
               <div className="border-t border-ink-100 bg-sage-50/50 px-6 py-4 sm:px-7">
                 <p className="flex items-start gap-2 text-[0.78rem] leading-relaxed text-ink-500">
                   <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-400" />
-                  Sugestia została wygenerowana na podstawie opisanych objawów i ma
-                  charakter wyłącznie informacyjny. Ostateczną decyzję podejmuje lekarz.
+                  Sugestia została wygenerowana przez Gemini AI na podstawie przesłanych materiałów.
                 </p>
               </div>
             </div>
