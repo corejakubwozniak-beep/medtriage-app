@@ -21,6 +21,7 @@ import {
   Upload,
   Trash2,
   Download,
+  Clock,
 } from 'lucide-react';
 
 type AnalysisResult = {
@@ -30,6 +31,15 @@ type AnalysisResult = {
   specialistNote: string;
   tests: string[];
   urgency: 'Planowy' | 'Standardowy' | 'Pilny';
+};
+
+// Nowy typ dla historii
+type HistoryItem = {
+  id: string;
+  date: string;
+  symptoms: string;
+  hasImage: boolean;
+  result: AnalysisResult;
 };
 
 const CARDIAC_RESULT: AnalysisResult = {
@@ -132,6 +142,12 @@ function App() {
   const [imageFile, setImageFile] = useState<{ base64: string; mimeType: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
+  // Inicjalizacja historii z localStorage
+  const [history, setHistory] = useState<HistoryItem[]>(() => {
+    const saved = localStorage.getItem('medtriage_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -153,6 +169,19 @@ function App() {
   const removeImage = () => {
     setImageFile(null);
     setImagePreview(null);
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
+    localStorage.removeItem('medtriage_history');
+  };
+
+  const loadFromHistory = (item: HistoryItem) => {
+    setSymptoms(item.symptoms);
+    setResult(item.result);
+    setImageFile(null);
+    setImagePreview(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -183,6 +212,20 @@ function App() {
 
       setProgress(100);
       setResult(mappedResult);
+
+      // Zapisywanie do historii i localStorage (max 10 elementów)
+      const newItem: HistoryItem = {
+        id: Date.now().toString(),
+        date: new Date().toLocaleString(),
+        symptoms: symptoms.trim() || 'Przeanalizowano wyłącznie zdjęcie',
+        hasImage: !!imageFile,
+        result: mappedResult,
+      };
+      
+      const newHistory = [newItem, ...history].slice(0, 10);
+      setHistory(newHistory);
+      localStorage.setItem('medtriage_history', JSON.stringify(newHistory));
+
     } catch (error) {
       console.error('Błąd podczas analizy objawów:', error);
     } finally {
@@ -526,6 +569,119 @@ function App() {
               ))}
             </div>
           </section>
+        )}
+
+        {/* SEKCJA HISTORII - Ukryta w PDF */}
+        {history.length > 0 && (
+          <section className="mt-12 animate-fade-up print:hidden">
+            <div className="mb-5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2.5">
+                <Clock className="h-5 w-5 text-ink-500" />
+                <h2 className="text-base font-semibold text-ink-900">
+                  Historia Twoich analiz
+                </h2>
+              </div>
+              <button
+                onClick={clearHistory}
+                className="text-xs font-semibold text-ink-400 hover:text-sand-500 transition-colors"
+              >
+                Wyczyść historię
+              </button>
+            </div>
+            
+            <div className="grid gap-3 sm:grid-cols-2">
+              {history.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => loadFromHistory(item)}
+                  className="flex flex-col items-start gap-2 rounded-2xl border border-ink-100 bg-white/60 p-4 text-left shadow-sm transition-all hover:border-sage-200 hover:bg-white hover:shadow-card focus:outline-none"
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <span className="text-[0.7rem] font-semibold uppercase tracking-wider text-ink-400">
+                      {item.date}
+                    </span>
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold ${URGENCY_STYLES[item.result.urgency]}`}>
+                      {item.result.urgency}
+                    </span>
+                  </div>
+                  <p className="line-clamp-2 text-sm font-medium text-ink-900">
+                    {item.symptoms}
+                  </p>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-sage-600">
+                    <Compass className="h-3.5 w-3.5" />
+                    <span className="font-semibold">{item.result.direction}</span>
+                    {item.hasImage && (
+                      <span className="ml-auto inline-flex items-center gap-1 rounded bg-ink-100 px-1.5 py-0.5 text-[0.65rem] font-semibold text-ink-600">
+                        <Upload className="h-3 w-3" />
+                        Zdjęcie
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Booking confirmation modal */}
+        {bookedFacility && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-5 backdrop-blur-sm animate-fade-in"
+            onClick={() => setBookedFacility(null)}
+          >
+            <div
+              className="relative w-full max-w-md rounded-3xl border border-ink-100 bg-white p-7 shadow-card animate-fade-up"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setBookedFacility(null)}
+                className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-ink-400 transition-colors hover:bg-ink-50 hover:text-ink-700"
+                aria-label="Zamknij"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+              <div className="flex flex-col items-center text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-sage-100 text-sage-600">
+                  <CheckCircle2 className="h-9 w-9" strokeWidth={2} />
+                </div>
+                <h3 className="mt-5 text-xl font-bold text-ink-900">
+                  Rezerwacja potwierdzona!
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-ink-600">
+                  Wyniki badania zostaną automatycznie przesłane do analizy AI.
+                </p>
+
+                <div className="mt-5 w-full rounded-2xl border border-ink-100 bg-sage-50/50 px-4 py-3.5 text-left">
+                  <div className="flex items-center gap-2.5">
+                    <Building2 className="h-4 w-4 shrink-0 text-sage-600" />
+                    <p className="text-sm font-semibold text-ink-900">
+                      {bookedFacility.name}
+                    </p>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2.5">
+                    <CalendarClock className="h-4 w-4 shrink-0 text-teal-600" />
+                    <p className="text-sm text-ink-700">
+                      {bookedFacility.earliestSlot}
+                    </p>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2.5">
+                    <UserRound className="h-4 w-4 shrink-0 text-ink-500" />
+                    <p className="text-sm text-ink-700">
+                      {bookedFacility.doctor}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setBookedFacility(null)}
+                  className="mt-6 w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:from-sage-600 hover:to-teal-600 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-sage-400/25"
+                >
+                  Gotowe
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Footer - Ukryty w PDF */}
