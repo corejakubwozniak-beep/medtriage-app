@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { analyzeSymptomsWithGemini } from './gemini';
-import { CARDIAC_RESULT, CARDIAC_FACILITIES, GENERAL_FACILITIES, URGENCY_STYLES } from './data';
+import { supabase } from './supabase';
+import { CARDIAC_RESULT, GENERAL_FACILITIES, URGENCY_STYLES } from './data';
 import { AnalysisResult, Facility, HistoryItem } from './types';
 import {
   Stethoscope,
@@ -26,11 +27,6 @@ import {
   Clock,
 } from 'lucide-react';
 
-function facilitiesForResult(result: AnalysisResult | null): Facility[] {
-  if (!result) return [];
-  return result.direction === 'Kardiologia' ? CARDIAC_FACILITIES : GENERAL_FACILITIES;
-}
-
 function App() {
   const [symptoms, setSymptoms] = useState('');
   const [loading, setLoading] = useState(false);
@@ -40,6 +36,41 @@ function App() {
 
   const [imageFile, setImageFile] = useState<{ base64: string; mimeType: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  const [facilities, setFacilities] = useState<Facility[]>(GENERAL_FACILITIES);
+
+  // Pobieranie placówek z bazy Supabase
+  useEffect(() => {
+    async function fetchFacilities() {
+      try {
+        const { data, error } = await supabase.from('facilities').select('*');
+        if (error) {
+          console.error('Błąd pobierania placówek z Supabase:', error);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          console.log('Pobrane placówki z bazy:', data);
+          const mapped: Facility[] = data.map((item: any) => ({
+            name: item.name,
+            address: item.address,
+            earliestSlot: item.earliest_slot,
+            isFastest: item.is_fastest,
+            doctor: item.doctor,
+            rating: Number(item.rating),
+            direction: item.direction,
+          }));
+          setFacilities(mapped);
+        }
+      } catch (error) {
+        console.error('Nie udało się połączyć z Supabase:', error);
+      }
+    }
+
+    fetchFacilities();
+  }, []);
+
+  const currentFacilities = facilities;
 
   const [history, setHistory] = useState<HistoryItem[]>(() => {
     const saved = localStorage.getItem('medtriage_history');
@@ -98,7 +129,7 @@ function App() {
       const rawAiResult = await analyzeSymptomsWithGemini(symptoms, imageFile);
 
       const mappedResult: AnalysisResult = {
-        direction: rawAiResult.direction || 'Diagnostyka Ogólna',
+        direction: rawAiResult.direction || 'Diagnostyka ogólna',
         directionNote: rawAiResult.explanation || 'Przeanalizowano opisane objawy oraz załączone materiały.',
         specialist: rawAiResult.specialist || 'Lekarz Rodzinny',
         specialistNote: `Sugerowana konsultacja: ${rawAiResult.specialist || 'Lekarz Rodzinny'}.`,
@@ -382,17 +413,17 @@ function App() {
           )}
         </section>
 
-        {/* Nearest available slots */}
+        {/* Wszystkie placówki z Supabase (bez filtrów) */}
         {!loading && result && (
           <section className="mt-7 animate-fade-up print:hidden">
             <div className="mb-4 flex items-center gap-2.5">
               <CalendarClock className="h-5 w-5 text-teal-600" />
               <h2 className="text-base font-semibold text-ink-900">
-                Najbliższe wolne terminy w połączonych placówkach
+                Wszystkie dostępne placówki w Zielonkach i Krakowie (z bazy Supabase)
               </h2>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              {facilitiesForResult(result).map((facility) => (
+              {currentFacilities.map((facility) => (
                 <div
                   key={facility.name}
                   className="flex flex-col rounded-3xl border border-ink-100 bg-white/85 p-5 shadow-card backdrop-blur-sm transition-all duration-200 hover:border-sage-200 hover:shadow-card sm:p-6"
@@ -538,7 +569,7 @@ function App() {
                   Rezerwacja potwierdzona!
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-ink-600">
-                  Wyniki badania zostaną automatycznie przesłane do analizy AI.
+                  Wyniki badania zostaną automatycznie przesłane do wybranej placówki.
                 </p>
 
                 <div className="mt-5 w-full rounded-2xl border border-ink-100 bg-sage-50/50 px-4 py-3.5 text-left">
@@ -563,7 +594,7 @@ function App() {
                 </div>
 
                 <button
-                  onClick={() => setBookedFacility(name => null)}
+                  onClick={() => setBookedFacility(null)}
                   className="mt-6 w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:from-sage-600 hover:to-teal-600 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-sage-400/25"
                 >
                   Gotowe
