@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { analyzeSymptomsWithGemini } from './gemini';
 import {
   Stethoscope,
   Activity,
@@ -143,29 +144,34 @@ function App() {
   const [result, setResult] = useState<AnalysisResult | null>(CARDIAC_RESULT);
   const [bookedFacility, setBookedFacility] = useState<Facility | null>(null);
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!symptoms.trim() || loading) return;
-    setLoading(true);
-    setProgress(0);
-    setResult(null);
+  const handleSubmit = async (e: FormEvent) => {
+  e.preventDefault();
+  if (!symptoms.trim() || loading) return;
 
-    const duration = 1000;
-    const interval = 40;
-    const elapsed = setInterval(() => {
-      setProgress((p) => {
-        const next = p + (interval / duration) * 100;
-        return next >= 100 ? 100 : next;
-      });
-    }, interval);
+  setLoading(true);
+  setProgress(10);
+  setResult(null);
 
-    setTimeout(() => {
-      clearInterval(elapsed);
-      setProgress(100);
-      setResult(analyzeSymptoms(symptoms));
-      setLoading(false);
-    }, duration);
-  };
+  // Animacja paska postępu — powoli rośnie do 90%, czekając na odpowiedź z chmury
+  const interval = setInterval(() => {
+    setProgress((prev) => (prev >= 90 ? 90 : prev + 5));
+  }, 150);
+
+  try {
+    // Prawdziwe zapytanie do darmowego AI Gemini
+    const aiResult = await analyzeSymptomsWithGemini(symptoms);
+    
+    // Gdy AI odpowie: pasek skacze do 100% i zapisujemy wynik
+    setProgress(100);
+    setResult(aiResult);
+  } catch (error) {
+    console.error("Błąd podczas analizy objawów:", error);
+  } finally {
+    // Czyszczenie timera i wyłączenie stanu ładowania (wykonuje się zawsze)
+    clearInterval(interval);
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen">
