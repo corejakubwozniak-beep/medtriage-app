@@ -40,38 +40,42 @@ export const URGENCY_STYLES: Record<AnalysisResult['urgency'], string> = {
 
 export const CARDIAC_FACILITIES: Facility[] = [
   {
-    name: 'Klinika Kardiologiczna ProMed',
-    address: 'ul. Kardiologiczna 12, Warszawa',
+    name: 'Centrum Medyczne Zielonki',
+    address: 'ul. Krakowskie Przedmieście 12, Zielonki',
     earliestSlot: 'Dziś, godz. 16:30',
     isFastest: true,
     doctor: 'dr n. med. Jan Kowalski',
     rating: 4.9,
+    direction: 'Kardiologia',
   },
   {
-    name: 'Centrum Medyczne Diagnostyka+',
-    address: 'al. Niepodległości 220, Warszawa',
+    name: 'Krakowskie Centrum Kardiologii',
+    address: 'ul. Prądnicka 80, Kraków',
     earliestSlot: 'Jutro, godz. 09:00',
     isFastest: false,
     doctor: 'dr Anna Wiśniewska',
     rating: 4.7,
+    direction: 'Kardiologia',
   },
 ];
 
 export const GENERAL_FACILITIES: Facility[] = [
   {
     name: 'Centrum Medyczne Diagnostyka+',
-    address: 'al. Niepodległości 220, Warszawa',
+    address: 'al. Niepodległości 220, Kraków',
     earliestSlot: 'Dziś, godz. 17:15',
     isFastest: true,
     doctor: 'dr Piotr Nowak',
     rating: 4.8,
+    direction: 'Diagnostyka ogólna',
   },
   {
-    name: 'Przychodnia Rodzinna Zdrowie',
-    address: 'ul. Słoneczna 5, Warszawa',
+    name: 'Przychodnia Rodzinna w Zielonkach',
+    address: 'ul. Słoneczna 2, Zielonki',
     earliestSlot: 'Jutro, godz. 10:30',
     isFastest: false,
     doctor: 'dr Maria Lewandowska',
     rating: 4.6,
+    direction: 'Diagnostyka ogólna',
   },
 ];
