@@ -543,7 +543,7 @@ function App() {
                   </div>
                   <button
                     type="submit"
-                    className="w-full mt-2 rounded-2xl bg-gradient-to-br from-ink-800 to-ink-900 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-ink-700 hover:to-ink-800"
+                    className="w-full mt-2 rounded-2xl bg-gradient-to-br from-ink-800 to-ink-900 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-ink-700 hover:to-ink-800 cursor-pointer"
                   >
                     Zaloguj się
                   </button>
@@ -678,12 +678,8 @@ function App() {
 
               </div>
             </section>
-        )) : (
-          
-          /* Tutaj znajduje się Twój dotychczasowy widok placówek i rezerwacji dla pacjenta */
-          null
-        )}
-
+          )
+        ) : null}
 
         {/* Wszystkie placówki z Supabase wraz z realnymi terminami */}
         {!loading && result && (
