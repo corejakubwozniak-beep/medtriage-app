@@ -33,7 +33,7 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<AnalysisResult | null>(CARDIAC_RESULT);
   const [bookedFacility, setBookedFacility] = useState<Facility | null>(null);
-
+  const [selectedSlot, setSelectedSlot] = useState<any | null>(null);
   const [imageFile, setImageFile] = useState<{ base64: string; mimeType: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
@@ -436,7 +436,7 @@ function App() {
           )}
         </section>
 
-        {/* Wszystkie placówki z Supabase (bez filtrów) */}
+        {/* Wszystkie placówki z Supabase wraz z realnymi terminami */}
         {!loading && result && (
           <section className="mt-7 animate-fade-up print:hidden">
             <div className="mb-4 flex items-center gap-2.5">
@@ -466,21 +466,27 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${
-                        facility.isFastest
-                          ? 'border-sage-300 bg-sage-100 text-sage-700'
-                          : 'border-ink-200 bg-ink-50 text-ink-600'
-                      }`}
-                    >
-                      {facility.isFastest && <Zap className="h-3.5 w-3.5" />}
-                      {facility.earliestSlot}
-                    </span>
-                    {facility.isFastest && (
-                      <span className="inline-flex items-center rounded-full bg-sage-500 px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-wide text-white">
-                        Najszybszy termin
-                      </span>
+                  {/* Wyświetlanie realnych, klikalnych terminów z bazy */}
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold text-ink-500 mb-2 uppercase tracking-wider">Wybierz termin wizyty:</p>
+                    {facility.appointments && facility.appointments.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {facility.appointments.map((slot) => (
+                          <button
+                            key={slot.id}
+                            onClick={() => {
+                              setSelectedSlot(slot);
+                              setBookedFacility(facility);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-sage-300 bg-sage-50 px-3 py-2 text-xs font-semibold text-sage-700 transition-all hover:bg-sage-600 hover:text-white hover:border-sage-600 shadow-sm cursor-pointer"
+                          >
+                            <span>📅 {slot.date}</span>
+                            <span className="font-bold">godz. {slot.time.slice(0, 5)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-ink-400 italic">Brak wolnych terminów online w tej placówce</p>
                     )}
                   </div>
 
@@ -500,14 +506,6 @@ function App() {
                       </div>
                     </div>
                   </div>
-
-                  <button
-                    onClick={() => setBookedFacility(facility)}
-                    className="group mt-4 inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:from-sage-600 hover:to-teal-600 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-sage-400/25"
-                  >
-                    Szybka rezerwacja
-                    <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
-                  </button>
                 </div>
               ))}
             </div>
@@ -567,17 +565,23 @@ function App() {
         )}
 
         {/* Booking modal */}
-        {bookedFacility && (
+        {bookedFacility && selectedSlot && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-5 backdrop-blur-sm animate-fade-in"
-            onClick={() => setBookedFacility(null)}
+            onClick={() => {
+              setBookedFacility(null);
+              setSelectedSlot(null);
+            }}
           >
             <div
               className="relative w-full max-w-md rounded-3xl border border-ink-100 bg-white p-7 shadow-card animate-fade-up"
               onClick={(e) => e.stopPropagation()}
             >
               <button
-                onClick={() => setBookedFacility(null)}
+                onClick={() => {
+                  setBookedFacility(null);
+                  setSelectedSlot(null);
+                }}
                 className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-ink-400 transition-colors hover:bg-ink-50 hover:text-ink-700"
                 aria-label="Zamknij"
               >
@@ -604,8 +608,8 @@ function App() {
                   </div>
                   <div className="mt-2 flex items-center gap-2.5">
                     <CalendarClock className="h-4 w-4 shrink-0 text-teal-600" />
-                    <p className="text-sm text-ink-700">
-                      {bookedFacility.earliestSlot}
+                    <p className="text-sm font-semibold text-teal-800">
+                      📅 {selectedSlot.date} o godz. {selectedSlot.time.slice(0, 5)}
                     </p>
                   </div>
                   <div className="mt-2 flex items-center gap-2.5">
@@ -617,8 +621,19 @@ function App() {
                 </div>
 
                 <button
-                  onClick={() => setBookedFacility(null)}
-                  className="mt-6 w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:from-sage-600 hover:to-teal-600 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-sage-400/25"
+                  onClick={async () => {
+                    // Opcjonalnie: aktualizacja statusu w bazie na 'booked'
+                    if (selectedSlot) {
+                      await supabase
+                        .from('appointments')
+                        .update({ status: 'booked' })
+                        .eq('id', selectedSlot.id);
+                    }
+                    setBookedFacility(null);
+                    setSelectedSlot(null);
+                    window.location.reload(); // Odświeżenie, by termin zniknął z listy
+                  }}
+                  className="mt-6 w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:from-sage-600 hover:to-teal-600 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-sage-400/25 cursor-pointer"
                 >
                   Gotowe
                 </button>
@@ -639,4 +654,3 @@ function App() {
 }
 
 export default App;
-
