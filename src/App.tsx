@@ -20,7 +20,6 @@ import {
   MapPin,
   CheckCircle2,
   X,
-  Zap,
   Upload,
   Trash2,
   Download,
@@ -35,7 +34,7 @@ function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isAdminView, setIsAdminView] = useState(false);
-  const [adminFacilityId, setAdminFacilityId] = useState<number>(15);
+  const [adminFacilityId, setAdminFacilityId] = useState<number>(1);
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('');
   const [symptoms, setSymptoms] = useState('');
@@ -263,10 +262,10 @@ function App() {
     <div className="min-h-screen print:bg-white print:py-0">
       <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14 print:px-0 print:py-0 print:max-w-none">
         
-        {/* Header Button */}
+        {/* Przełącznik widoku administratora / pacjenta */}
         <button 
           onClick={() => setIsAdminView(!isAdminView)}
-          className="text-xs text-ink-400 hover:text-sage-600 transition-colors mt-2 cursor-pointer"
+          className="text-xs text-ink-400 hover:text-sage-600 transition-colors mt-2 cursor-pointer font-medium"
         >
           {isAdminView ? '← Powrót do widoku pacjenta' : '🔒 Panel dla placówek medycznych'}
         </button>
@@ -300,7 +299,7 @@ function App() {
           </p>
         </div>
 
-        {/* --- PANEL ADMINISTRACYJNY / LOGOWANIE --- */}
+        {/* --- PANEL ADMINISTRACYJNY LUB LOGOWANIE (WYŚWIETLANY PO KLIKNIĘCIU) --- */}
         {isAdminView && (
           !session ? (
             <section className="mt-7 animate-fade-up max-w-sm mx-auto print:hidden">
@@ -336,7 +335,7 @@ function App() {
                   </div>
                   <button
                     type="submit"
-                    className="w-full mt-2 rounded-2xl bg-gradient-to-br from-ink-800 to-ink-900 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-ink-700 hover:to-ink-800 cursor-pointer"
+                    className="w-full mt-2 rounded-2xl bg-gradient-to-br from-ink-800 to-ink-900 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-ink-700 hover:to-ink-800 cursor-pointer transition-all"
                   >
                     Zaloguj się
                   </button>
@@ -414,7 +413,7 @@ function App() {
                           setTimeout(() => window.location.reload(), 1000);
                         }
                       }}
-                      className="w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-sage-600 hover:to-teal-600 cursor-pointer"
+                      className="w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-sage-600 hover:to-teal-600 cursor-pointer transition-all"
                     >
                       Dodaj wolny termin do bazy
                     </button>
@@ -478,7 +477,7 @@ function App() {
           )
         )}
 
-        {/* Form */}
+        {/* Formularz pacjenta */}
         <section className="mt-7 animate-fade-up print:hidden" style={{ animationDelay: '0.1s' }}>
           <form
             onSubmit={handleSubmit}
@@ -529,7 +528,7 @@ function App() {
                   <button
                     type="button"
                     onClick={removeImage}
-                    className="flex h-8 w-8 items-center justify-center rounded-xl text-ink-400 transition-colors hover:bg-white hover:text-sand-500"
+                    className="flex h-8 w-8 items-center justify-center rounded-xl text-ink-400 transition-colors hover:bg-white hover:text-sand-500 cursor-pointer"
                     aria-label="Usuń zdjęcie"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -573,7 +572,7 @@ function App() {
           </form>
         </section>
 
-        {/* Result card */}
+        {/* Wynik analizy AI */}
         <section className="mt-7 print:mt-0">
           {loading && (
             <div className="flex items-center justify-center gap-3 rounded-3xl border border-ink-100 bg-white/70 py-16 shadow-card animate-fade-in print:hidden">
@@ -695,13 +694,13 @@ function App() {
           )}
         </section>
 
-        {/* Wszystkie placówki z Supabase wraz z realnymi terminami */}
+        {/* Lista dostępnych placówek z bazy Supabase */}
         {!loading && result && (
           <section className="mt-7 animate-fade-up print:hidden">
             <div className="mb-4 flex items-center gap-2.5">
               <CalendarClock className="h-5 w-5 text-teal-600" />
               <h2 className="text-base font-semibold text-ink-900">
-                Wszystkie dostępne placówki w Zielonkach i Krakowie (z bazy Supabase)
+                Dostępne placówki i wolne terminy (Zielonki / Kraków)
               </h2>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -770,7 +769,7 @@ function App() {
           </section>
         )}
 
-        {/* History section */}
+        {/* Sekcja historii analiz */}
         {history.length > 0 && (
           <section className="mt-12 animate-fade-up print:hidden">
             <div className="mb-5 flex items-center justify-between gap-4">
@@ -822,7 +821,7 @@ function App() {
           </section>
         )}
 
-        {/* Booking modal */}
+        {/* Modal rezerwacji wizyty */}
         {bookedFacility && selectedSlot && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-5 backdrop-blur-sm animate-fade-in print:hidden"
@@ -936,7 +935,7 @@ function App() {
           </div>
         )}
 
-        {/* --- NOWOCZESNE POWIADOMIENIE (TOAST) --- */}
+        {/* Powiadomienie Toast */}
         {toast && (
           <div className="fixed bottom-6 right-6 z-50 animate-fade-up">
             <div className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 shadow-card border backdrop-blur-md ${
@@ -954,7 +953,7 @@ function App() {
           </div>
         )}
 
-        {/* Footer */}
+        {/* Stopka */}
         <footer className="mt-10 text-center print:hidden">
           <p className="text-xs text-ink-400">
             MedTriage · Asystent wsparcia diagnostycznego · Nie jest urządzeniem medycznym
