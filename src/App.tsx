@@ -28,6 +28,9 @@ import {
 } from 'lucide-react';
 
 function App() {
+  const [session, setSession] = useState<any>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isAdminView, setIsAdminView] = useState(false);
   const [adminFacilityId, setAdminFacilityId] = useState<number>(15); // Domyślnie ID 15 (Zielonki)
   const [newDate, setNewDate] = useState('');
@@ -40,7 +43,7 @@ function App() {
   const [selectedSlot, setSelectedSlot] = useState<any | null>(null);
   const [imageFile, setImageFile] = useState<{ base64: string; mimeType: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-
+  
   const [facilities, setFacilities] = useState<Facility[]>([]);
 
   // Pobieranie placówek z bazy Supabase wraz z terminami
@@ -96,6 +99,35 @@ function App() {
 
     fetchFacilities();
   }, []);
+
+  // Sprawdzanie sesji użytkownika
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) alert('Błąd logowania: Nieprawidłowy email lub hasło.');
+    else {
+      setEmail('');
+      setPassword('');
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
 
   const currentFacilities = facilities;
 
@@ -446,72 +478,126 @@ function App() {
           )}
         </section>
 
-        {isAdminView ? (
-          <section className="mt-7 animate-fade-up">
-            <div className="rounded-3xl border border-sage-200 bg-white p-6 shadow-card sm:p-7">
-              <h2 className="text-lg font-bold text-ink-900 mb-2">Panel Zarządzania Placówki</h2>
-              <p className="text-xs text-ink-500 mb-5">Dodaj wolne terminy wizyt, które natychmiast pojawią się w systemie dla pacjentów.</p>
+       {isAdminView ? (
+          !session ? (
+            /* --- FORMULARZ LOGOWANIA DLA PLACÓWEK --- */
+            <section className="mt-7 animate-fade-up max-w-sm mx-auto print:hidden">
+              <form onSubmit={handleLogin} className="rounded-3xl border border-ink-100 bg-white p-6 shadow-card sm:p-7">
+                <div className="flex flex-col items-center mb-6">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sage-100 text-sage-600 mb-3">
+                    <Building2 className="h-6 w-6" />
+                  </div>
+                  <h2 className="text-lg font-bold text-ink-900">Logowanie dla placówek</h2>
+                  <p className="text-xs text-ink-500 text-center mt-1">Zaloguj się, aby zarządzać grafikiem wizyt.</p>
+                </div>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-ink-700 mb-1">Wybierz placówkę:</label>
-                  <select 
-                    value={adminFacilityId} 
-                    onChange={(e) => setAdminFacilityId(Number(e.target.value))}
-                    className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-3 py-2 text-sm text-ink-900"
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-700 mb-1">Adres e-mail</label>
+                    <input 
+                      type="email" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-700 mb-1">Hasło</label>
+                    <input 
+                      type="password" 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full mt-2 rounded-2xl bg-gradient-to-br from-ink-800 to-ink-900 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-ink-700 hover:to-ink-800"
                   >
-                    {facilities.map((fac) => (
-                      <option key={fac.id} value={fac.id}>{fac.name} ({fac.address})</option>
-                    ))}
-                  </select>
+                    Zaloguj się
+                  </button>
                 </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-ink-700 mb-1">Data:</label>
-                    <input 
-                      type="date" 
-                      value={newDate} 
-                      onChange={(e) => setNewDate(e.target.value)}
-                      className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-3 py-2 text-sm text-ink-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-ink-700 mb-1">Godzina:</label>
-                    <input 
-                      type="time" 
-                      value={newTime} 
-                      onChange={(e) => setNewTime(e.target.value)}
-                      className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-3 py-2 text-sm text-ink-900"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  onClick={async () => {
-                    if (!newDate || !newTime) return alert('Wypełnij datę i godzinę!');
-                    
-                    const { error } = await supabase.from('appointments').insert([
-                      { facility_id: adminFacilityId, date: newDate, time: newTime, status: 'available' }
-                    ]);
-
-                    if (error) {
-                      alert('Błąd dodawania terminu: ' + error.message);
-                    } else {
-                      alert('Sukces! Termin został dodany do bazy.');
-                      setNewDate('');
-                      setNewTime('');
-                      window.location.reload(); // Odświeżenie, by pobrać nową listę
-                    }
-                  }}
-                  className="w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-sage-600 hover:to-teal-600 cursor-pointer"
+              </form>
+            </section>
+          ) : (
+            /* --- WŁAŚCIWY PANEL ADMINISTRACYJNY (PO ZALOGOWANIU) --- */
+            <section className="mt-7 animate-fade-up print:hidden">
+              <div className="rounded-3xl border border-sage-200 bg-white p-6 shadow-card sm:p-7 relative">
+                
+                <button 
+                  onClick={handleLogout}
+                  className="absolute top-6 right-6 text-xs font-semibold text-red-500 hover:text-red-700"
                 >
-                  Dodaj wolny termin do bazy
+                  Wyloguj się
                 </button>
+
+                <h2 className="text-lg font-bold text-ink-900 mb-2">Panel Zarządzania Placówki</h2>
+                <p className="text-xs text-ink-500 mb-5">Jesteś zalogowany. Dodaj wolne terminy wizyt, które natychmiast pojawią się w systemie dla pacjentów.</p>
+
+                <div className="space-y-4 max-w-xl">
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-700 mb-1">Wybierz placówkę:</label>
+                    <select 
+                      value={adminFacilityId} 
+                      onChange={(e) => setAdminFacilityId(Number(e.target.value))}
+                      className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-3 py-2 text-sm text-ink-900"
+                    >
+                      {facilities.map((fac) => (
+                        <option key={fac.id} value={fac.id}>{fac.name} ({fac.address})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-ink-700 mb-1">Data:</label>
+                      <input 
+                        type="date" 
+                        value={newDate} 
+                        onChange={(e) => setNewDate(e.target.value)}
+                        className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-3 py-2 text-sm text-ink-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-ink-700 mb-1">Godzina:</label>
+                      <input 
+                        type="time" 
+                        value={newTime} 
+                        onChange={(e) => setNewTime(e.target.value)}
+                        className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-3 py-2 text-sm text-ink-900"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      if (!newDate || !newTime) return alert('Wypełnij datę i godzinę!');
+                      
+                      const { error } = await supabase.from('appointments').insert([
+                        { facility_id: adminFacilityId, date: newDate, time: newTime, status: 'available' }
+                      ]);
+
+                      if (error) {
+                        alert('Błąd dodawania terminu: ' + error.message);
+                      } else {
+                        alert('Sukces! Termin został dodany do bazy.');
+                        setNewDate('');
+                        setNewTime('');
+                        window.location.reload(); // Odświeżenie, by pobrać nową listę
+                      }
+                    }}
+                    className="w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-sage-600 hover:to-teal-600 cursor-pointer"
+                  >
+                    Dodaj wolny termin do bazy
+                  </button>
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          )
         ) : (
+          
           /* Tutaj znajduje się Twój dotychczasowy widok placówek i rezerwacji dla pacjenta */
           null
         )}
