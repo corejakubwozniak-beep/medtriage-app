@@ -1,7 +1,7 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { analyzeSymptomsWithGemini } from './gemini';
 import { supabase } from './supabase';
-import { CARDIAC_RESULT, GENERAL_FACILITIES, URGENCY_STYLES } from './data';
+import { CARDIAC_RESULT, URGENCY_STYLES } from './data';
 import { AnalysisResult, Facility, HistoryItem } from './types';
 import {
   Stethoscope,
@@ -39,27 +39,50 @@ function App() {
 
   const [facilities, setFacilities] = useState<Facility[]>([]);
 
-  // Pobieranie placówek z bazy Supabase
+  // Pobieranie placówek z bazy Supabase wraz z terminami
   useEffect(() => {
     async function fetchFacilities() {
       try {
-        const { data, error } = await supabase.from('facilities').select('*');
+        // Zmienione zapytanie: pobieramy facilities ORAZ połączone z nimi appointments
+        const { data, error } = await supabase
+          .from('facilities')
+          .select(`
+            *,
+            appointments (
+              id,
+              date,
+              time,
+              status
+            )
+          `);
+
         if (error) {
           console.error('Błąd pobierania placówek z Supabase:', error);
           return;
         }
 
         if (data && data.length > 0) {
-          console.log('Pobrane placówki z bazy:', data);
-          const mapped: Facility[] = data.map((item: any) => ({
-            name: item.name,
-            address: item.address,
-            earliestSlot: item.earliest_slot,
-            isFastest: item.is_fastest,
-            doctor: item.doctor,
-            rating: Number(item.rating),
-            direction: item.direction,
-          }));
+          console.log('Pobrane placówki z terminami:', data);
+          
+          const mapped: Facility[] = data.map((item: any) => {
+            // Filtrujemy, żeby do aplikacji trafiły TYLKO wolne terminy
+            const availableAppointments = item.appointments?.filter(
+              (app: any) => app.status === 'available'
+            ) || [];
+
+            return {
+              id: item.id,
+              name: item.name,
+              address: item.address,
+              earliestSlot: item.earliest_slot,
+              isFastest: item.is_fastest,
+              doctor: item.doctor,
+              rating: Number(item.rating),
+              direction: item.direction,
+              appointments: availableAppointments, // Przypisujemy wolne terminy!
+            };
+          });
+          
           setFacilities(mapped);
         }
       } catch (error) {
@@ -615,4 +638,5 @@ function App() {
   );
 }
 
+export default App;
 export default App;
