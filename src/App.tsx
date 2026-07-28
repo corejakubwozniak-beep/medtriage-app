@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 
 function App() {
+  const [bookedAppointments, setBookedAppointments] = useState<any[]>([]);
   const [patientName, setPatientName] = useState('');
   const [patientPhone, setPatientPhone] = useState('');
   const [session, setSession] = useState<any>(null);
@@ -116,6 +117,32 @@ function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Pobieranie zarezerwowanych wizyt do panelu administratora
+  useEffect(() => {
+    if (session) {
+      async function fetchBookedAppointments() {
+        const { data, error } = await supabase
+          .from('appointments')
+          .select(`
+            *,
+            facilities (
+              name,
+              address
+            )
+          `)
+          .eq('status', 'booked')
+          .order('date', { ascending: true });
+
+        if (error) {
+          console.error('Błąd pobierania zarezerwowanych wizyt:', error);
+        } else if (data) {
+          setBookedAppointments(data);
+        }
+      }
+      fetchBookedAppointments();
+    }
+  }, [session]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -530,75 +557,128 @@ function App() {
                 
                 <button 
                   onClick={handleLogout}
-                  className="absolute top-6 right-6 text-xs font-semibold text-red-500 hover:text-red-700"
+                  className="absolute top-6 right-6 text-xs font-semibold text-red-500 hover:text-red-700 cursor-pointer"
                 >
                   Wyloguj się
                 </button>
 
                 <h2 className="text-lg font-bold text-ink-900 mb-2">Panel Zarządzania Placówki</h2>
-                <p className="text-xs text-ink-500 mb-5">Jesteś zalogowany. Dodaj wolne terminy wizyt, które natychmiast pojawią się w systemie dla pacjentów.</p>
+                <p className="text-xs text-ink-500 mb-6">Jesteś zalogowany. Możesz dodawać wolne terminy oraz zarządzać zarezerwowanymi wizytami pacjentów.</p>
 
-                <div className="space-y-4 max-w-xl">
-                  <div>
-                    <label className="block text-xs font-semibold text-ink-700 mb-1">Wybierz placówkę:</label>
-                    <select 
-                      value={adminFacilityId} 
-                      onChange={(e) => setAdminFacilityId(Number(e.target.value))}
-                      className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-3 py-2 text-sm text-ink-900"
+                {/* --- SEKCJA 1: DODAWANIE TERMINÓW --- */}
+                <div className="rounded-2xl border border-ink-100 bg-sage-50/30 p-5 mb-8">
+                  <h3 className="text-sm font-bold text-ink-900 mb-3">📅 Dodaj nowy wolny termin</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-ink-700 mb-1">Wybierz placówkę:</label>
+                      <select 
+                        value={adminFacilityId} 
+                        onChange={(e) => setAdminFacilityId(Number(e.target.value))}
+                        className="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900"
+                      >
+                        {facilities.map((fac) => (
+                          <option key={fac.id} value={fac.id}>{fac.name} ({fac.address})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-ink-700 mb-1">Data:</label>
+                        <input 
+                          type="date" 
+                          value={newDate} 
+                          onChange={(e) => setNewDate(e.target.value)}
+                          className="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-ink-700 mb-1">Godzina:</label>
+                        <input 
+                          type="time" 
+                          value={newTime} 
+                          onChange={(e) => setNewTime(e.target.value)}
+                          className="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={async () => {
+                        if (!newDate || !newTime) return alert('Wypełnij datę i godzinę!');
+                        
+                        const { error } = await supabase.from('appointments').insert([
+                          { facility_id: adminFacilityId, date: newDate, time: newTime, status: 'available' }
+                        ]);
+
+                        if (error) {
+                          alert('Błąd dodawania terminu: ' + error.message);
+                        } else {
+                          alert('Sukces! Termin został dodany do bazy.');
+                          setNewDate('');
+                          setNewTime('');
+                          window.location.reload();
+                        }
+                      }}
+                      className="w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-sage-600 hover:to-teal-600 cursor-pointer"
                     >
-                      {facilities.map((fac) => (
-                        <option key={fac.id} value={fac.id}>{fac.name} ({fac.address})</option>
-                      ))}
-                    </select>
+                      Dodaj wolny termin do bazy
+                    </button>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-ink-700 mb-1">Data:</label>
-                      <input 
-                        type="date" 
-                        value={newDate} 
-                        onChange={(e) => setNewDate(e.target.value)}
-                        className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-3 py-2 text-sm text-ink-900"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-ink-700 mb-1">Godzina:</label>
-                      <input 
-                        type="time" 
-                        value={newTime} 
-                        onChange={(e) => setNewTime(e.target.value)}
-                        className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-3 py-2 text-sm text-ink-900"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={async () => {
-                      if (!newDate || !newTime) return alert('Wypełnij datę i godzinę!');
-                      
-                      const { error } = await supabase.from('appointments').insert([
-                        { facility_id: adminFacilityId, date: newDate, time: newTime, status: 'available' }
-                      ]);
-
-                      if (error) {
-                        alert('Błąd dodawania terminu: ' + error.message);
-                      } else {
-                        alert('Sukces! Termin został dodany do bazy.');
-                        setNewDate('');
-                        setNewTime('');
-                        window.location.reload(); // Odświeżenie, by pobrać nową listę
-                      }
-                    }}
-                    className="w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-sage-600 hover:to-teal-600 cursor-pointer"
-                  >
-                    Dodaj wolny termin do bazy
-                  </button>
                 </div>
+
+                {/* --- SEKCJA 2: LISTA ZAREZERWOWANYCH WIZYT --- */}
+                <div>
+                  <h3 className="text-sm font-bold text-ink-900 mb-3">📋 Zarezerwowane wizyty pacjentów</h3>
+                  {bookedAppointments.length > 0 ? (
+                    <div className="space-y-3">
+                      {bookedAppointments.map((app) => (
+                        <div key={app.id} className="rounded-2xl border border-ink-100 bg-white p-4 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg">
+                                📅 {app.date} godz. {app.time.slice(0, 5)}
+                              </span>
+                              <span className="text-xs text-ink-500 font-medium">
+                                ({app.facilities?.name})
+                              </span>
+                            </div>
+                            <p className="mt-2 text-sm font-bold text-ink-900">
+                              👤 {app.patient_info || 'Brak danych pacjenta'}
+                            </p>
+                            <p className="text-xs text-sage-700 font-semibold mt-0.5">
+                              🩺 Triaż AI: {app.triage_direction || 'Brak danych'}
+                            </p>
+                          </div>
+                          
+                          <button
+                            onClick={async () => {
+                              if (confirm('Czy na pewno chcesz zwolnić ten termin (anulować wizytę)?')) {
+                                const { error } = await supabase
+                                  .from('appointments')
+                                  .update({ status: 'available', patient_info: null, triage_direction: null })
+                                  .eq('id', app.id);
+                                
+                                if (!error) {
+                                  window.location.reload();
+                                }
+                              }
+                            }}
+                            className="self-start sm:self-center text-xs font-semibold text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-xl border border-red-200 transition-colors cursor-pointer"
+                          >
+                            Anuluj / Zwolnij termin
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-ink-400 italic bg-sage-50/40 p-4 rounded-2xl text-center">Brak zarezerwowanych wizyt w systemie.</p>
+                  )}
+                </div>
+
               </div>
             </section>
-          )
-        ) : (
+        )) : (
           
           /* Tutaj znajduje się Twój dotychczasowy widok placówek i rezerwacji dla pacjenta */
           null
