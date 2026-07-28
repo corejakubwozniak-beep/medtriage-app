@@ -35,7 +35,7 @@ function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isAdminView, setIsAdminView] = useState(false);
-  const [adminFacilityId, setAdminFacilityId] = useState<number>(15); // Domyślnie ID 15 (Zielonki)
+  const [adminFacilityId, setAdminFacilityId] = useState<number>(15);
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('');
   const [symptoms, setSymptoms] = useState('');
@@ -49,11 +49,9 @@ function App() {
   
   const [facilities, setFacilities] = useState<Facility[]>([]);
 
-  // Pobieranie placówek z bazy Supabase wraz z terminami
   useEffect(() => {
     async function fetchFacilities() {
       try {
-        // Zmienione zapytanie: pobieramy facilities ORAZ połączone z nimi appointments
         const { data, error } = await supabase
           .from('facilities')
           .select(`
@@ -72,10 +70,7 @@ function App() {
         }
 
         if (data && data.length > 0) {
-          console.log('Pobrane placówki z terminami:', data);
-          
           const mapped: Facility[] = data.map((item: any) => {
-            // Filtrujemy, żeby do aplikacji trafiły TYLKO wolne terminy
             const availableAppointments = item.appointments?.filter(
               (app: any) => app.status === 'available'
             ) || [];
@@ -89,7 +84,7 @@ function App() {
               doctor: item.doctor,
               rating: Number(item.rating),
               direction: item.direction,
-              appointments: availableAppointments, // Przypisujemy wolne terminy!
+              appointments: availableAppointments,
             };
           });
           
@@ -103,7 +98,6 @@ function App() {
     fetchFacilities();
   }, []);
 
-  // Sprawdzanie sesji użytkownika
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -118,7 +112,6 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Pobieranie zarezerwowanych wizyt do panelu administratora
   useEffect(() => {
     if (session) {
       async function fetchBookedAppointments() {
@@ -254,13 +247,14 @@ function App() {
     <div className="min-h-screen print:bg-white print:py-0">
       <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14 print:px-0 print:py-0 print:max-w-none">
         
-        {/* Header */}
+        {/* Header Button */}
         <button 
-        onClick={() => setIsAdminView(!isAdminView)}
-        className="text-xs text-ink-400 hover:text-sage-600 transition-colors mt-2"
+          onClick={() => setIsAdminView(!isAdminView)}
+          className="text-xs text-ink-400 hover:text-sage-600 transition-colors mt-2 cursor-pointer"
         >
-        {isAdminView ? '← Powrót do widoku pacjenta' : '🔒 Panel dla placówek medycznych'}
-</button>
+          {isAdminView ? '← Powrót do widoku pacjenta' : '🔒 Panel dla placówek medycznych'}
+        </button>
+
         <header className="animate-fade-up print:hidden">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sage-400 to-teal-500 text-white shadow-soft">
@@ -289,6 +283,178 @@ function App() {
             skontaktuj się z numerem alarmowym 112 lub udaj się na SOR.
           </p>
         </div>
+
+        {/* --- PANEL ADMINISTRACYJNY / LOGOWANIE --- */}
+        {isAdminView && (
+          !session ? (
+            <section className="mt-7 animate-fade-up max-w-sm mx-auto print:hidden">
+              <form onSubmit={handleLogin} className="rounded-3xl border border-ink-100 bg-white p-6 shadow-card sm:p-7">
+                <div className="flex flex-col items-center mb-6">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sage-100 text-sage-600 mb-3">
+                    <Building2 className="h-6 w-6" />
+                  </div>
+                  <h2 className="text-lg font-bold text-ink-900">Logowanie dla placówek</h2>
+                  <p className="text-xs text-ink-500 text-center mt-1">Zaloguj się, aby zarządzać grafikiem wizyt.</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-700 mb-1">Adres e-mail</label>
+                    <input 
+                      type="email" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-700 mb-1">Hasło</label>
+                    <input 
+                      type="password" 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full mt-2 rounded-2xl bg-gradient-to-br from-ink-800 to-ink-900 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-ink-700 hover:to-ink-800 cursor-pointer"
+                  >
+                    Zaloguj się
+                  </button>
+                </div>
+              </form>
+            </section>
+          ) : (
+            <section className="mt-7 animate-fade-up print:hidden">
+              <div className="rounded-3xl border border-sage-200 bg-white p-6 shadow-card sm:p-7 relative">
+                <button 
+                  onClick={handleLogout}
+                  className="absolute top-6 right-6 text-xs font-semibold text-red-500 hover:text-red-700 cursor-pointer"
+                >
+                  Wyloguj się
+                </button>
+
+                <h2 className="text-lg font-bold text-ink-900 mb-2">Panel Zarządzania Placówki</h2>
+                <p className="text-xs text-ink-500 mb-6">Jesteś zalogowany. Możesz dodawać wolne terminy oraz zarządzać zarezerwowanymi wizytami pacjentów.</p>
+
+                {/* Sekcja 1: Dodawanie terminów */}
+                <div className="rounded-2xl border border-ink-100 bg-sage-50/30 p-5 mb-8">
+                  <h3 className="text-sm font-bold text-ink-900 mb-3">📅 Dodaj nowy wolny termin</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-ink-700 mb-1">Wybierz placówkę:</label>
+                      <select 
+                        value={adminFacilityId} 
+                        onChange={(e) => setAdminFacilityId(Number(e.target.value))}
+                        className="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900"
+                      >
+                        {facilities.map((fac) => (
+                          <option key={fac.id} value={fac.id}>{fac.name} ({fac.address})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-ink-700 mb-1">Data:</label>
+                        <input 
+                          type="date" 
+                          value={newDate} 
+                          onChange={(e) => setNewDate(e.target.value)}
+                          className="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-ink-700 mb-1">Godzina:</label>
+                        <input 
+                          type="time" 
+                          value={newTime} 
+                          onChange={(e) => setNewTime(e.target.value)}
+                          className="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={async () => {
+                        if (!newDate || !newTime) return alert('Wypełnij datę i godzinę!');
+                        
+                        const { error } = await supabase.from('appointments').insert([
+                          { facility_id: adminFacilityId, date: newDate, time: newTime, status: 'available' }
+                        ]);
+
+                        if (error) {
+                          alert('Błąd dodawania terminu: ' + error.message);
+                        } else {
+                          alert('Sukces! Termin został dodany do bazy.');
+                          setNewDate('');
+                          setNewTime('');
+                          window.location.reload();
+                        }
+                      }}
+                      className="w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-sage-600 hover:to-teal-600 cursor-pointer"
+                    >
+                      Dodaj wolny termin do bazy
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sekcja 2: Lista zarezerwowanych wizyt */}
+                <div>
+                  <h3 className="text-sm font-bold text-ink-900 mb-3">📋 Zarezerwowane wizyty pacjentów</h3>
+                  {bookedAppointments.length > 0 ? (
+                    <div className="space-y-3">
+                      {bookedAppointments.map((app) => (
+                        <div key={app.id} className="rounded-2xl border border-ink-100 bg-white p-4 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg">
+                                📅 {app.date} godz. {app.time.slice(0, 5)}
+                              </span>
+                              <span className="text-xs text-ink-500 font-medium">
+                                ({app.facilities?.name})
+                              </span>
+                            </div>
+                            <p className="mt-2 text-sm font-bold text-ink-900">
+                              👤 {app.patient_info || 'Brak danych pacjenta'}
+                            </p>
+                            <p className="text-xs text-sage-700 font-semibold mt-0.5">
+                              🩺 Triaż AI: {app.triage_direction || 'Brak danych'}
+                            </p>
+                          </div>
+                          
+                          <button
+                            onClick={async () => {
+                              if (confirm('Czy na pewno chcesz zwolnić ten termin (anulować wizytę)?')) {
+                                const { error } = await supabase
+                                  .from('appointments')
+                                  .update({ status: 'available', patient_info: null, triage_direction: null })
+                                  .eq('id', app.id);
+                                
+                                if (!error) {
+                                  window.location.reload();
+                                }
+                              }
+                            }}
+                            className="self-start sm:self-center text-xs font-semibold text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-xl border border-red-200 transition-colors cursor-pointer"
+                          >
+                            Anuluj / Zwolnij termin
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-ink-400 italic bg-sage-50/40 p-4 rounded-2xl text-center">Brak zarezerwowanych wizyt w systemie.</p>
+                  )}
+                </div>
+
+              </div>
+            </section>
+          )
+        )}
 
         {/* Form */}
         <section className="mt-7 animate-fade-up print:hidden" style={{ animationDelay: '0.1s' }}>
@@ -360,7 +526,7 @@ function App() {
                 <button
                   type="submit"
                   disabled={(!symptoms.trim() && !imageFile) || loading}
-                  className="group relative inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-6 py-3.5 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:from-sage-600 hover:to-teal-600 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-sage-400/25 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none sm:w-auto"
+                  className="group relative inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-6 py-3.5 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:from-sage-600 hover:to-teal-600 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-sage-400/25 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none sm:w-auto cursor-pointer"
                 >
                   {loading && (
                     <span
@@ -489,7 +655,7 @@ function App() {
               <div className="border-t border-ink-100 bg-white p-6 sm:px-7 print:hidden flex justify-center">
                 <button
                   onClick={() => window.print()}
-                  className="group inline-flex items-center gap-2.5 rounded-2xl bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:bg-ink-800 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-ink-900/20"
+                  className="group inline-flex items-center gap-2.5 rounded-2xl bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:bg-ink-800 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-ink-900/20 cursor-pointer"
                 >
                   <Download className="h-4.5 w-4.5 transition-transform group-hover:-translate-y-0.5" />
                   Pobierz raport dla lekarza (PDF)
@@ -506,223 +672,6 @@ function App() {
             </div>
           )}
         </section>
-
-       {isAdminView ? (
-          !session ? (
-            /* --- FORMULARZ LOGOWANIA DLA PLACÓWEK --- */
-            <section className="mt-7 animate-fade-up max-w-sm mx-auto print:hidden">
-              <form onSubmit={handleLogin} className="rounded-3xl border border-ink-100 bg-white p-6 shadow-card sm:p-7">
-                <div className="flex flex-col items-center mb-6">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sage-100 text-sage-600 mb-3">
-                    <Building2 className="h-6 w-6" />
-                  </div>
-                  <h2 className="text-lg font-bold text-ink-900">Logowanie dla placówek</h2>
-                  <p className="text-xs text-ink-500 text-center mt-1">Zaloguj się, aby zarządzać grafikiem wizyt.</p>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-ink-700 mb-1">Adres e-mail</label>
-                    <input 
-                      type="email" 
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-ink-700 mb-1">Hasło</label>
-                    <input 
-                      type="password" 
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
-                      required
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full mt-2 rounded-2xl bg-gradient-to-br from-ink-800 to-ink-900 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-ink-700 hover:to-ink-800 cursor-pointer"
-                  >
-                    Zaloguj się
-                  </button>
-                </div>
-              </form>
-            </section>
-          ) : (
-        {/* --- PANEL ADMINISTRACYJNY / LOGOWANIE (WYŚWIETLANY NA SAMEJ GÓRZE PO KLIKNIĘCIU) --- */}
-        {isAdminView && (
-          !session ? (
-            <section className="mt-7 animate-fade-up max-w-sm mx-auto print:hidden">
-              <form onSubmit={handleLogin} className="rounded-3xl border border-ink-100 bg-white p-6 shadow-card sm:p-7">
-                <div className="flex flex-col items-center mb-6">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sage-100 text-sage-600 mb-3">
-                    <Building2 className="h-6 w-6" />
-                  </div>
-                  <h2 className="text-lg font-bold text-ink-900">Logowanie dla placówek</h2>
-                  <p className="text-xs text-ink-500 text-center mt-1">Zaloguj się, aby zarządzać grafikiem wizyt.</p>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-ink-700 mb-1">Adres e-mail</label>
-                    <input 
-                      type="email" 
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-ink-700 mb-1">Hasło</label>
-                    <input 
-                      type="password" 
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
-                      required
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full mt-2 rounded-2xl bg-gradient-to-br from-ink-800 to-ink-900 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-ink-700 hover:to-ink-800 cursor-pointer"
-                  >
-                    Zaloguj się
-                  </button>
-                </div>
-              </form>
-            </section>
-          ) : (
-            <section className="mt-7 animate-fade-up print:hidden">
-              <div className="rounded-3xl border border-sage-200 bg-white p-6 shadow-card sm:p-7 relative">
-                
-                <button 
-                  onClick={handleLogout}
-                  className="absolute top-6 right-6 text-xs font-semibold text-red-500 hover:text-red-700 cursor-pointer"
-                >
-                  Wyloguj się
-                </button>
-
-                <h2 className="text-lg font-bold text-ink-900 mb-2">Panel Zarządzania Placówki</h2>
-                <p className="text-xs text-ink-500 mb-6">Jesteś zalogowany. Możesz dodawać wolne terminy oraz zarządzać zarezerwowanymi wizytami pacjentów.</p>
-
-                {/* --- SEKCJA 1: DODAWANIE TERMINÓW --- */}
-                <div className="rounded-2xl border border-ink-100 bg-sage-50/30 p-5 mb-8">
-                  <h3 className="text-sm font-bold text-ink-900 mb-3">📅 Dodaj nowy wolny termin</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-ink-700 mb-1">Wybierz placówkę:</label>
-                      <select 
-                        value={adminFacilityId} 
-                        onChange={(e) => setAdminFacilityId(Number(e.target.value))}
-                        className="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900"
-                      >
-                        {facilities.map((fac) => (
-                          <option key={fac.id} value={fac.id}>{fac.name} ({fac.address})</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-ink-700 mb-1">Data:</label>
-                        <input 
-                          type="date" 
-                          value={newDate} 
-                          onChange={(e) => setNewDate(e.target.value)}
-                          className="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-ink-700 mb-1">Godzina:</label>
-                        <input 
-                          type="time" 
-                          value={newTime} 
-                          onChange={(e) => setNewTime(e.target.value)}
-                          className="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900"
-                        />
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={async () => {
-                        if (!newDate || !newTime) return alert('Wypełnij datę i godzinę!');
-                        
-                        const { error } = await supabase.from('appointments').insert([
-                          { facility_id: adminFacilityId, date: newDate, time: newTime, status: 'available' }
-                        ]);
-
-                        if (error) {
-                          alert('Błąd dodawania terminu: ' + error.message);
-                        } else {
-                          alert('Sukces! Termin został dodany do bazy.');
-                          setNewDate('');
-                          setNewTime('');
-                          window.location.reload();
-                        }
-                      }}
-                      className="w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-sage-600 hover:to-teal-600 cursor-pointer"
-                    >
-                      Dodaj wolny termin do bazy
-                    </button>
-                  </div>
-                </div>
-
-                {/* --- SEKCJA 2: LISTA ZAREZERWOWANYCH WIZYT --- */}
-                <div>
-                  <h3 className="text-sm font-bold text-ink-900 mb-3">📋 Zarezerwowane wizyty pacjentów</h3>
-                  {bookedAppointments.length > 0 ? (
-                    <div className="space-y-3">
-                      {bookedAppointments.map((app) => (
-                        <div key={app.id} className="rounded-2xl border border-ink-100 bg-white p-4 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg">
-                                📅 {app.date} godz. {app.time.slice(0, 5)}
-                              </span>
-                              <span className="text-xs text-ink-500 font-medium">
-                                ({app.facilities?.name})
-                              </span>
-                            </div>
-                            <p className="mt-2 text-sm font-bold text-ink-900">
-                              👤 {app.patient_info || 'Brak danych pacjenta'}
-                            </p>
-                            <p className="text-xs text-sage-700 font-semibold mt-0.5">
-                              🩺 Triaż AI: {app.triage_direction || 'Brak danych'}
-                            </p>
-                          </div>
-                          
-                          <button
-                            onClick={async () => {
-                              if (confirm('Czy na pewno chcesz zwolnić ten termin (anulować wizytę)?')) {
-                                const { error } = await supabase
-                                  .from('appointments')
-                                  .update({ status: 'available', patient_info: null, triage_direction: null })
-                                  .eq('id', app.id);
-                                
-                                if (!error) {
-                                  window.location.reload();
-                                }
-                              }
-                            }}
-                            className="self-start sm:self-center text-xs font-semibold text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-xl border border-red-200 transition-colors cursor-pointer"
-                          >
-                            Anuluj / Zwolnij termin
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-ink-400 italic bg-sage-50/40 p-4 rounded-2xl text-center">Brak zarezerwowanych wizyt w systemie.</p>
-                  )}
-                </div>
-
-              </div>
-            </section>
-          )
-        )}
 
         {/* Wszystkie placówki z Supabase wraz z realnymi terminami */}
         {!loading && result && (
@@ -754,7 +703,6 @@ function App() {
                     </div>
                   </div>
 
-                  {/* Wyświetlanie realnych, klikalnych terminów z bazy */}
                   <div className="mt-4">
                     <p className="text-xs font-semibold text-ink-500 mb-2 uppercase tracking-wider">Wybierz termin wizyty:</p>
                     {facility.appointments && facility.appointments.length > 0 ? (
@@ -812,7 +760,7 @@ function App() {
               </div>
               <button
                 onClick={clearHistory}
-                className="text-xs font-semibold text-ink-400 hover:text-sand-500 transition-colors"
+                className="text-xs font-semibold text-ink-400 hover:text-sand-500 transition-colors cursor-pointer"
               >
                 Wyczyść historię
               </button>
@@ -823,7 +771,7 @@ function App() {
                 <button
                   key={item.id}
                   onClick={() => loadFromHistory(item)}
-                  className="flex flex-col items-start gap-2 rounded-2xl border border-ink-100 bg-white/60 p-4 text-left shadow-sm transition-all hover:border-sage-200 hover:bg-white hover:shadow-card focus:outline-none"
+                  className="flex flex-col items-start gap-2 rounded-2xl border border-ink-100 bg-white/60 p-4 text-left shadow-sm transition-all hover:border-sage-200 hover:bg-white hover:shadow-card focus:outline-none cursor-pointer"
                 >
                   <div className="flex w-full items-center justify-between">
                     <span className="text-[0.7rem] font-semibold uppercase tracking-wider text-ink-400">
@@ -852,7 +800,7 @@ function App() {
           </section>
         )}
 
-      {/* Booking modal */}
+        {/* Booking modal */}
         {bookedFacility && selectedSlot && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-5 backdrop-blur-sm animate-fade-in print:hidden"
@@ -870,7 +818,7 @@ function App() {
                   setBookedFacility(null);
                   setSelectedSlot(null);
                 }}
-                className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-ink-400 transition-colors hover:bg-ink-50 hover:text-ink-700"
+                className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-ink-400 transition-colors hover:bg-ink-50 hover:text-ink-700 cursor-pointer"
                 aria-label="Zamknij"
               >
                 <X className="h-5 w-5" />
@@ -902,7 +850,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* --- POLA NA DANE PACJENTA --- */}
                 <div className="mt-5 w-full space-y-3 text-left">
                   <div>
                     <label className="block text-xs font-semibold text-ink-700 mb-1">Imię i nazwisko</label>
