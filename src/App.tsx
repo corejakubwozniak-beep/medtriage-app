@@ -551,7 +551,50 @@ function App() {
               </form>
             </section>
           ) : (
-            /* --- WŁAŚCIWY PANEL ADMINISTRACYJNY (PO ZALOGOWANIU) --- */
+        {/* --- PANEL ADMINISTRACYJNY / LOGOWANIE (WYŚWIETLANY NA SAMEJ GÓRZE PO KLIKNIĘCIU) --- */}
+        {isAdminView && (
+          !session ? (
+            <section className="mt-7 animate-fade-up max-w-sm mx-auto print:hidden">
+              <form onSubmit={handleLogin} className="rounded-3xl border border-ink-100 bg-white p-6 shadow-card sm:p-7">
+                <div className="flex flex-col items-center mb-6">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sage-100 text-sage-600 mb-3">
+                    <Building2 className="h-6 w-6" />
+                  </div>
+                  <h2 className="text-lg font-bold text-ink-900">Logowanie dla placówek</h2>
+                  <p className="text-xs text-ink-500 text-center mt-1">Zaloguj się, aby zarządzać grafikiem wizyt.</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-700 mb-1">Adres e-mail</label>
+                    <input 
+                      type="email" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-700 mb-1">Hasło</label>
+                    <input 
+                      type="password" 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full mt-2 rounded-2xl bg-gradient-to-br from-ink-800 to-ink-900 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-ink-700 hover:to-ink-800 cursor-pointer"
+                  >
+                    Zaloguj się
+                  </button>
+                </div>
+              </form>
+            </section>
+          ) : (
             <section className="mt-7 animate-fade-up print:hidden">
               <div className="rounded-3xl border border-sage-200 bg-white p-6 shadow-card sm:p-7 relative">
                 
@@ -679,7 +722,7 @@ function App() {
               </div>
             </section>
           )
-        ) : null}
+        )}
 
         {/* Wszystkie placówki z Supabase wraz z realnymi terminami */}
         {!loading && result && (
