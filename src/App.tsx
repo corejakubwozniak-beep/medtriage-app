@@ -47,36 +47,17 @@ function App() {
   const [imageFile, setImageFile] = useState<{ base64: string; mimeType: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   
-  const [facilities, setFacilities] = useState<Facility[]>([]);
+  // Stan dla nowoczesnych powiadomień (Toast)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => {
       setToast(null);
-    }, 4000); // Powiadomienie znika po 4 sekundach
+    }, 4000);
   };
-
-  {/* --- NOWOCZESNE POWIADOMIENIE (TOAST) --- */}
-        {toast && (
-          <div className="fixed bottom-6 right-6 z-50 animate-fade-up">
-            <div className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 shadow-card border backdrop-blur-md ${
-              toast.type === 'success' 
-                ? 'bg-sage-900/90 border-sage-700 text-white' 
-                : 'bg-red-900/90 border-red-700 text-white'
-            }`}>
-              <span className="text-base">
-                {toast.type === 'success' ? '✅' : '⚠️'}
-              </span>
-              <p className="text-xs font-semibold tracking-wide">
-                {toast.message}
-              </p>
-            </div>
-          </div>
-        )}
-
-
-
+  
+  const [facilities, setFacilities] = useState<Facility[]>([]);
 
   useEffect(() => {
     async function fetchFacilities() {
@@ -169,15 +150,18 @@ function App() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) alert('Błąd logowania: Nieprawidłowy email lub hasło.');
-    else {
+    if (error) {
+      showToast('Błąd logowania: Nieprawidłowy email lub hasło.', 'error');
+    } else {
       setEmail('');
       setPassword('');
+      showToast('Zalogowano pomyślnie do panelu placówki!');
     }
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    showToast('Wylogowano pomyślnie.');
   };
 
   const currentFacilities = facilities;
@@ -213,6 +197,7 @@ function App() {
   const clearHistory = () => {
     setHistory([]);
     localStorage.removeItem('medtriage_history');
+    showToast('Wyczyszczono historię analiz.');
   };
 
   const loadFromHistory = (item: HistoryItem) => {
@@ -263,9 +248,11 @@ function App() {
       const newHistory = [newItem, ...history].slice(0, 10);
       setHistory(newHistory);
       localStorage.setItem('medtriage_history', JSON.stringify(newHistory));
+      showToast('Analiza AI została ukończona pomyślnie!');
 
     } catch (error) {
       console.error('Błąd podczas analizy objawów:', error);
+      showToast('Wystąpił błąd podczas analizy AI.', 'error');
     } finally {
       clearInterval(interval);
       setLoading(false);
@@ -409,19 +396,22 @@ function App() {
 
                     <button
                       onClick={async () => {
-                        if (!newDate || !newTime) return alert('Wypełnij datę i godzinę!');
+                        if (!newDate || !newTime) {
+                          showToast('Wypełnij datę i godzinę!', 'error');
+                          return;
+                        }
                         
                         const { error } = await supabase.from('appointments').insert([
                           { facility_id: adminFacilityId, date: newDate, time: newTime, status: 'available' }
                         ]);
 
                         if (error) {
-                          alert('Błąd dodawania terminu: ' + error.message);
+                          showToast('Błąd dodawania terminu: ' + error.message, 'error');
                         } else {
-                          alert('Sukces! Termin został dodany do bazy.');
+                          showToast('Termin został pomyślnie dodany do bazy!');
                           setNewDate('');
                           setNewTime('');
-                          window.location.reload();
+                          setTimeout(() => window.location.reload(), 1000);
                         }
                       }}
                       className="w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-sage-600 hover:to-teal-600 cursor-pointer"
@@ -464,7 +454,10 @@ function App() {
                                   .eq('id', app.id);
                                 
                                 if (!error) {
-                                  window.location.reload();
+                                  showToast('Zwolniono termin pomyślnie.');
+                                  setTimeout(() => window.location.reload(), 1000);
+                                } else {
+                                  showToast('Błąd podczas zwalniania terminu.', 'error');
                                 }
                               }
                             }}
@@ -905,7 +898,8 @@ function App() {
                 <button
                   onClick={async () => {
                     if (!patientName.trim() || !patientPhone.trim()) {
-                      return alert('Proszę podać imię, nazwisko i numer telefonu.');
+                      showToast('Proszę podać imię, nazwisko i numer telefonu.', 'error');
+                      return;
                     }
 
                     if (selectedSlot) {
@@ -922,14 +916,14 @@ function App() {
                         .eq('id', selectedSlot.id);
 
                       if (error) {
-                        alert('Błąd podczas rezerwacji: ' + error.message);
+                        showToast('Błąd podczas rezerwacji: ' + error.message, 'error');
                       } else {
-                        alert('Wizyta została pomyślnie zarezerwowana!');
+                        showToast('Wizyta została pomyślnie zarezerwowana!');
                         setBookedFacility(null);
                         setSelectedSlot(null);
                         setPatientName('');
                         setPatientPhone('');
-                        window.location.reload(); 
+                        setTimeout(() => window.location.reload(), 1000); 
                       }
                     }
                   }}
@@ -938,6 +932,24 @@ function App() {
                   Potwierdź rezerwację
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- NOWOCZESNE POWIADOMIENIE (TOAST) --- */}
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 animate-fade-up">
+            <div className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 shadow-card border backdrop-blur-md ${
+              toast.type === 'success' 
+                ? 'bg-sage-900/90 border-sage-700 text-white' 
+                : 'bg-red-900/90 border-red-700 text-white'
+            }`}>
+              <span className="text-base">
+                {toast.type === 'success' ? '✅' : '⚠️'}
+              </span>
+              <p className="text-xs font-semibold tracking-wide">
+                {toast.message}
+              </p>
             </div>
           </div>
         )}
