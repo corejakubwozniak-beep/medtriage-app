@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 
 function App() {
+  const [patientName, setPatientName] = useState('');
+  const [patientPhone, setPatientPhone] = useState('');
   const [session, setSession] = useState<any>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -731,10 +733,10 @@ function App() {
           </section>
         )}
 
-        {/* Booking modal */}
+      {/* Booking modal */}
         {bookedFacility && selectedSlot && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-5 backdrop-blur-sm animate-fade-in"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-5 backdrop-blur-sm animate-fade-in print:hidden"
             onClick={() => {
               setBookedFacility(null);
               setSelectedSlot(null);
@@ -760,10 +762,10 @@ function App() {
                   <CheckCircle2 className="h-9 w-9" strokeWidth={2} />
                 </div>
                 <h3 className="mt-5 text-xl font-bold text-ink-900">
-                  Rezerwacja potwierdzona!
+                  Rezerwacja wizyty
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-ink-600">
-                  Wyniki badania zostaną automatycznie przesłane do wybranej placówki.
+                  Wypełnij dane, aby potwierdzić termin. Wyniki diagnozy AI zostaną automatycznie przekazane do lekarza.
                 </p>
 
                 <div className="mt-5 w-full rounded-2xl border border-ink-100 bg-sage-50/50 px-4 py-3.5 text-left">
@@ -779,30 +781,66 @@ function App() {
                       📅 {selectedSlot.date} o godz. {selectedSlot.time.slice(0, 5)}
                     </p>
                   </div>
-                  <div className="mt-2 flex items-center gap-2.5">
-                    <UserRound className="h-4 w-4 shrink-0 text-ink-500" />
-                    <p className="text-sm text-ink-700">
-                      {bookedFacility.doctor}
-                    </p>
+                </div>
+
+                {/* --- POLA NA DANE PACJENTA --- */}
+                <div className="mt-5 w-full space-y-3 text-left">
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-700 mb-1">Imię i nazwisko</label>
+                    <input 
+                      type="text" 
+                      value={patientName}
+                      onChange={(e) => setPatientName(e.target.value)}
+                      placeholder="np. Jan Kowalski"
+                      className="w-full rounded-xl border border-ink-200 bg-white px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-700 mb-1">Numer telefonu</label>
+                    <input 
+                      type="tel" 
+                      value={patientPhone}
+                      onChange={(e) => setPatientPhone(e.target.value)}
+                      placeholder="np. 123 456 789"
+                      className="w-full rounded-xl border border-ink-200 bg-white px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
+                    />
                   </div>
                 </div>
 
                 <button
                   onClick={async () => {
-                    // Opcjonalnie: aktualizacja statusu w bazie na 'booked'
-                    if (selectedSlot) {
-                      await supabase
-                        .from('appointments')
-                        .update({ status: 'booked' })
-                        .eq('id', selectedSlot.id);
+                    if (!patientName.trim() || !patientPhone.trim()) {
+                      return alert('Proszę podać imię, nazwisko i numer telefonu.');
                     }
-                    setBookedFacility(null);
-                    setSelectedSlot(null);
-                    window.location.reload(); // Odświeżenie, by termin zniknął z listy
+
+                    if (selectedSlot) {
+                      const patientData = `Pacjent: ${patientName}, Tel: ${patientPhone}`;
+                      const triageInfo = result ? `${result.direction} (Priorytet: ${result.urgency})` : 'Brak danych AI';
+
+                      const { error } = await supabase
+                        .from('appointments')
+                        .update({ 
+                          status: 'booked',
+                          patient_info: patientData,
+                          triage_direction: triageInfo
+                        })
+                        .eq('id', selectedSlot.id);
+
+                      if (error) {
+                        alert('Błąd podczas rezerwacji: ' + error.message);
+                      } else {
+                        alert('Wizyta została pomyślnie zarezerwowana!');
+                        setBookedFacility(null);
+                        setSelectedSlot(null);
+                        setPatientName('');
+                        setPatientPhone('');
+                        window.location.reload(); 
+                      }
+                    }
                   }}
                   className="mt-6 w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:from-sage-600 hover:to-teal-600 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-sage-400/25 cursor-pointer"
                 >
-                  Gotowe
+                  Potwierdź rezerwację
                 </button>
               </div>
             </div>
