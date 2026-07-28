@@ -48,6 +48,35 @@ function App() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   
   const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(null);
+    }, 4000); // Powiadomienie znika po 4 sekundach
+  };
+
+  {/* --- NOWOCZESNE POWIADOMIENIE (TOAST) --- */}
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 animate-fade-up">
+            <div className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 shadow-card border backdrop-blur-md ${
+              toast.type === 'success' 
+                ? 'bg-sage-900/90 border-sage-700 text-white' 
+                : 'bg-red-900/90 border-red-700 text-white'
+            }`}>
+              <span className="text-base">
+                {toast.type === 'success' ? '✅' : '⚠️'}
+              </span>
+              <p className="text-xs font-semibold tracking-wide">
+                {toast.message}
+              </p>
+            </div>
+          </div>
+        )}
+
+
+
 
   useEffect(() => {
     async function fetchFacilities() {
