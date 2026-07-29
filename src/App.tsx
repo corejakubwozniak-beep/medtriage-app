@@ -46,7 +46,6 @@ function App() {
   const [imageFile, setImageFile] = useState<{ base64: string; mimeType: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   
-  // Stan dla nowoczesnych powiadomień (Toast)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -58,52 +57,74 @@ function App() {
   
   const [facilities, setFacilities] = useState<Facility[]>([]);
 
-  useEffect(() => {
-    async function fetchFacilities() {
-      try {
-        const { data, error } = await supabase
-          .from('facilities')
-          .select(`
-            *,
-            appointments (
-              id,
-              date,
-              time,
-              status
-            )
-          `);
+  // Funkcja pobierająca placówki i ich terminy (wyciągnięta osobno, by móc ją wywołać bez reloadu)
+  const fetchFacilities = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('facilities')
+        .select(`
+          *,
+          appointments (
+            id,
+            date,
+            time,
+            status
+          )
+        `);
 
-        if (error) {
-          console.error('Błąd pobierania placówek z Supabase:', error);
-          return;
-        }
-
-        if (data && data.length > 0) {
-          const mapped: Facility[] = data.map((item: any) => {
-            const availableAppointments = item.appointments?.filter(
-              (app: any) => app.status === 'available'
-            ) || [];
-
-            return {
-              id: item.id,
-              name: item.name,
-              address: item.address,
-              earliestSlot: item.earliest_slot,
-              isFastest: item.is_fastest,
-              doctor: item.doctor,
-              rating: Number(item.rating),
-              direction: item.direction,
-              appointments: availableAppointments,
-            };
-          });
-          
-          setFacilities(mapped);
-        }
-      } catch (error) {
-        console.error('Nie udało się połączyć z Supabase:', error);
+      if (error) {
+        console.error('Błąd pobierania placówek z Supabase:', error);
+        return;
       }
-    }
 
+      if (data && data.length > 0) {
+        const mapped: Facility[] = data.map((item: any) => {
+          const availableAppointments = item.appointments?.filter(
+            (app: any) => app.status === 'available'
+          ) || [];
+
+          return {
+            id: item.id,
+            name: item.name,
+            address: item.address,
+            earliestSlot: item.earliest_slot,
+            isFastest: item.is_fastest,
+            doctor: item.doctor,
+            rating: Number(item.rating),
+            direction: item.direction,
+            appointments: availableAppointments,
+          };
+        });
+        
+        setFacilities(mapped);
+      }
+    } catch (error) {
+      console.error('Nie udało się połączyć z Supabase:', error);
+    }
+  };
+
+  // Funkcja pobierająca zarezerwowane wizyty dla administratora
+  const fetchBookedAppointments = async () => {
+    const { data, error } = await supabase
+      .from('appointments')
+      .select(`
+        *,
+        facilities (
+          name,
+          address
+        )
+      `)
+      .eq('status', 'booked')
+      .order('date', { ascending: true });
+
+    if (error) {
+      console.error('Błąd pobierania zarezerwowanych wizyt:', error);
+    } else if (data) {
+      setBookedAppointments(data);
+    }
+  };
+
+  useEffect(() => {
     fetchFacilities();
   }, []);
 
@@ -123,25 +144,6 @@ function App() {
 
   useEffect(() => {
     if (session) {
-      async function fetchBookedAppointments() {
-        const { data, error } = await supabase
-          .from('appointments')
-          .select(`
-            *,
-            facilities (
-              name,
-              address
-            )
-          `)
-          .eq('status', 'booked')
-          .order('date', { ascending: true });
-
-        if (error) {
-          console.error('Błąd pobierania zarezerwowanych wizyt:', error);
-        } else if (data) {
-          setBookedAppointments(data);
-        }
-      }
       fetchBookedAppointments();
     }
   }, [session]);
@@ -299,7 +301,7 @@ function App() {
           </p>
         </div>
 
-        {/* --- PANEL ADMINISTRACYJNY LUB LOGOWANIE (WYŚWIETLANY PO KLIKNIĘCIU) --- */}
+        {/* --- PANEL ADMINISTRACYJNY LUB LOGOWANIE --- */}
         {isAdminView && (
           !session ? (
             <section className="mt-7 animate-fade-up max-w-sm mx-auto print:hidden">
@@ -410,7 +412,8 @@ function App() {
                           showToast('Termin został pomyślnie dodany do bazy!');
                           setNewDate('');
                           setNewTime('');
-                          setTimeout(() => window.location.reload(), 1000);
+                          // Zamiast window.location.reload() odświeżamy dane w stanie React:
+                          fetchFacilities();
                         }
                       }}
                       className="w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-sage-600 hover:to-teal-600 cursor-pointer transition-all"
@@ -454,7 +457,9 @@ function App() {
                                 
                                 if (!error) {
                                   showToast('Zwolniono termin pomyślnie.');
-                                  setTimeout(() => window.location.reload(), 1000);
+                                  // Odświeżamy stany bez reloadu strony:
+                                  fetchFacilities();
+                                  fetchBookedAppointments();
                                 } else {
                                   showToast('Błąd podczas zwalniania terminu.', 'error');
                                 }
@@ -922,7 +927,8 @@ function App() {
                         setSelectedSlot(null);
                         setPatientName('');
                         setPatientPhone('');
-                        setTimeout(() => window.location.reload(), 1000); 
+                        // Zamiast reloadu odświeżamy dane w tle:
+                        fetchFacilities();
                       }
                     }
                   }}
