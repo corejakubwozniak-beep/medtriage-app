@@ -861,6 +861,18 @@ function App() {
                   Wypełnij dane, aby potwierdzić termin. Wyniki diagnozy AI zostaną automatycznie przekazane do lekarza.
                 </p>
 
+                {/* ZADANIE 3: Logika bezpieczeństwa i stanów krytycznych (Emergency Override) */}
+                {result?.urgency === 'Pilny' && (
+                  <div className="mt-4 w-full rounded-2xl bg-red-50 border border-red-200 p-4 text-left">
+                    <p className="text-xs font-bold text-red-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>⚠️</span> Wysoki priorytet objawów (Stan Pilny)
+                    </p>
+                    <p className="text-xs text-red-600 mt-1 leading-relaxed">
+                      AI wykryło objawy wymagające pilnej uwagi. Jeśli stan zdrowia gwałtownie się pogarsza, nie czekaj na wizytę – zadzwoń pod numer alarmowy <strong>112</strong> lub udaj się na najbliższy SOR.
+                    </p>
+                  </div>
+                )}
+
                 <div className="mt-5 w-full rounded-2xl border border-ink-100 bg-sage-50/50 px-4 py-3.5 text-left">
                   <div className="flex items-center gap-2.5">
                     <Building2 className="h-4 w-4 shrink-0 text-sage-600" />
@@ -901,8 +913,15 @@ function App() {
 
                 <button
                   onClick={async () => {
-                    if (!patientName.trim() || !patientPhone.trim()) {
-                      showToast('Proszę podać imię, nazwisko i numer telefonu.', 'error');
+                    // ZADANIE 4: Walidacja danych wejściowych (Validation Logic)
+                    if (!patientName.trim()) {
+                      showToast('Proszę podać imię i nazwisko pacjenta.', 'error');
+                      return;
+                    }
+
+                    const phoneRegex = /^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{3,6}$/;
+                    if (!phoneRegex.test(patientPhone.trim())) {
+                      showToast('Wpisz poprawny numer telefonu (np. 123456789).', 'error');
                       return;
                     }
 
@@ -927,7 +946,6 @@ function App() {
                         setSelectedSlot(null);
                         setPatientName('');
                         setPatientPhone('');
-                        // Zamiast reloadu odświeżamy dane w tle:
                         fetchFacilities();
                       }
                     }
