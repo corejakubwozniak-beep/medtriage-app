@@ -104,7 +104,24 @@ function App() {
   };
 
   // Funkcja pobierająca zarezerwowane wizyty dla administratora
+  // Zaktualizowana funkcja uwzględniająca Multi-tenancy
   const fetchBookedAppointments = async () => {
+    if (!session?.user?.id) return;
+
+    // Najpierw sprawdzamy, która placówka jest przypisana do zalogowanego użytkownika
+    const { data: facilityData, error: facError } = await supabase
+      .from('facilities')
+      .select('id')
+      .eq('auth_user_id', session.user.id)
+      .single();
+
+    if (facError || !facilityData) {
+      // Jeśli konto nie jest przypisane do żadnej placówki, nie pobieramy nic lub pobieramy pustą listę
+      setBookedAppointments([]);
+      return;
+    }
+
+    // Pobieramy zarezerwowane wizyty WYŁĄCZNIE dla tej konkretnej placówki
     const { data, error } = await supabase
       .from('appointments')
       .select(`
@@ -114,16 +131,16 @@ function App() {
           address
         )
       `)
+      .eq('facility_id', facilityData.id)
       .eq('status', 'booked')
       .order('date', { ascending: true });
 
     if (error) {
-      console.error('Błąd pobierania zarezerwowanych wizyt:', error);
+      console.error('Błąd pobierania zarezerwowanych wizyt dla placówki:', error);
     } else if (data) {
       setBookedAppointments(data);
     }
   };
-
   useEffect(() => {
     fetchFacilities();
   }, []);
