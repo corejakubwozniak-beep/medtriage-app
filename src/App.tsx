@@ -946,25 +946,38 @@ function App() {
                       const patientData = `Pacjent: ${patientName}, Tel: ${patientPhone}`;
                       const triageInfo = result ? `${result.direction} (Priorytet: ${result.urgency})` : 'Brak danych AI';
 
-                      const { error } = await supabase
+                      // NOWA LOGIKA: Atomowa transakcja zapobiegająca podwójnej rezerwacji (Double-Booking)
+                      const { data: updatedSlots, error } = await supabase
                         .from('appointments')
                         .update({ 
                           status: 'booked',
                           patient_info: patientData,
                           triage_direction: triageInfo
                         })
-                        .eq('id', selectedSlot.id);
+                        .eq('id', selectedSlot.id)
+                        .eq('status', 'available') // Zaktualizuje tylko wtedy, gdy slot wciąż jest wolny!
+                        .select();
 
                       if (error) {
                         showToast('Błąd podczas rezerwacji: ' + error.message, 'error');
-                      } else {
-                        showToast('Wizyta została pomyślnie zarezerwowana!');
+                        return;
+                      }
+
+                      if (!updatedSlots || updatedSlots.length === 0) {
+                        showToast('Przykro nam, ale ten termin został właśnie zajęty przez inną osobę!', 'error');
                         setBookedFacility(null);
                         setSelectedSlot(null);
-                        setPatientName('');
-                        setPatientPhone('');
-                        fetchFacilities();
+                        fetchFacilities(); // Odświeżamy listę, by usunąć zajęty slot z ekranu
+                        return;
                       }
+
+                      // Sukces - termin został pomyślnie zarezerwowany dla nas
+                      showToast('Wizyta została pomyślnie zarezerwowana!');
+                      setBookedFacility(null);
+                      setSelectedSlot(null);
+                      setPatientName('');
+                      setPatientPhone('');
+                      fetchFacilities();
                     }
                   }}
                   className="mt-6 w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:from-sage-600 hover:to-teal-600 hover:shadow-card focus:outline-none focus:ring-4 focus:ring-sage-400/25 cursor-pointer"
