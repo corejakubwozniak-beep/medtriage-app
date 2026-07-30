@@ -144,8 +144,19 @@ function App() {
     }
   };
 
+  // Automatyczne pobieranie sesji i nasłuch na logowanie/wylogowanie
   useEffect(() => {
-    fetchFacilities();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -185,10 +196,11 @@ function App() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       showToast('Błąd logowania: Nieprawidłowy email lub hasło.', 'error');
     } else {
+      setSession(data.session); // <-- KLUCZOWA POPRAWKA: Zapisujemy sesję w stanie Reacta
       setEmail('');
       setPassword('');
       showToast('Zalogowano pomyślnie do panelu placówki!');
@@ -197,6 +209,7 @@ function App() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    setSession(null); // <-- KLUCZOWA POPRAWKA: Czyścimy sesję przy wylogowaniu
     showToast('Wylogowano pomyślnie.');
   };
 
