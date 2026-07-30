@@ -8,7 +8,7 @@ export async function analyzeSymptomsWithGemini(
   imageFile?: { base64: string; mimeType: string } | null
 ) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `
 Jesteś zaawansowanym asystentem triażowym w aplikacji medycznej MedTriage.
