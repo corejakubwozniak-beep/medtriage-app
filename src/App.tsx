@@ -45,9 +45,12 @@ function App() {
   const [selectedSlot, setSelectedSlot] = useState<any | null>(null);
   const [imageFile, setImageFile] = useState<{ base64: string; mimeType: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-
+  const [bulkStartDate, setBulkStartDate] = useState('');
+  const [bulkEndDate, setBulkEndDate] = useState('');
+  const [bulkStartTime, setBulkStartTime] = useState('08:00');
+  const [bulkEndTime, setBulkEndTime] = useState('16:00');
+  const [slotDurationMinutes, setSlotDurationMinutes] = useState(20); // co ile minut wizyta
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => {
@@ -145,25 +148,41 @@ function App() {
     fetchFacilities();
   }, []);
 
+ // Automatyczne wczytywanie historii z chmury po wpisaniu telefonu
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
+    const phone = patientPhone.trim();
+    const phoneRegex = /^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{3,6}$/;
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
+    if (phoneRegex.test(phone)) {
+      async function fetchCloudHistory() {
+        const { data, error } = await supabase
+          .from('triage_history')
+          .select('*')
+          .eq('patient_phone', phone)
+          .order('created_at', { ascending: false })
+          .limit(10);
 
-    return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    if (session) {
-      fetchBookedAppointments();
+        if (!error && data) {
+          const mappedHistory: HistoryItem[] = data.map((item: any) => ({
+            id: item.id.toString(),
+            date: new Date(item.created_at).toLocaleString(),
+            symptoms: item.symptoms,
+            hasImage: item.has_image,
+            result: {
+              direction: item.direction,
+              directionNote: 'Wczytano z historii chmurowej.',
+              specialist: item.specialist,
+              specialistNote: `Konsultacja: ${item.specialist}`,
+              tests: item.tests || [],
+              urgency: item.urgency
+            }
+          }));
+          setHistory(mappedHistory);
+        }
+      }
+      fetchCloudHistory();
     }
-  }, [session]);
+  }, [patientPhone]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -255,18 +274,44 @@ function App() {
       setProgress(100);
       setResult(mappedResult);
 
-      const newItem: HistoryItem = {
-        id: Date.now().toString(),
-        date: new Date().toLocaleString(),
-        symptoms: symptoms.trim() || 'Przeanalizowano wyłącznie zdjęcie',
-        hasImage: !!imageFile,
-        result: mappedResult,
-      };
-      
-      const newHistory = [newItem, ...history].slice(0, 10);
-      setHistory(newHistory);
-      localStorage.setItem('medtriage_history', JSON.stringify(newHistory));
-      showToast('Analiza AI została ukończona pomyślnie!');
+      // NOWY ZAPIS W CHMURZE (Supabase):
+      const phoneToUse = patientPhone.trim() || 'anonim';
+
+      const { data: insertedData, error: dbError } = await supabase
+        .from('triage_history')
+        .insert([
+          {
+            patient_phone: phoneToUse,
+            symptoms: symptoms.trim() || 'Przeanalizowano wyłącznie zdjęcie',
+            direction: mappedResult.direction,
+            specialist: mappedResult.specialist,
+            urgency: mappedResult.urgency,
+            tests: mappedResult.tests,
+            has_image: !!imageFile
+          }
+        ])
+        .select()
+        .single();
+
+      if (!dbError && insertedData) {
+        const newItem: HistoryItem = {
+          id: insertedData.id.toString(),
+          date: new Date(insertedData.created_at).toLocaleString(),
+          symptoms: insertedData.symptoms,
+          hasImage: insertedData.has_image,
+          result: {
+            direction: insertedData.direction,
+            directionNote: mappedResult.directionNote,
+            specialist: insertedData.specialist,
+            specialistNote: mappedResult.specialistNote,
+            tests: insertedData.tests || [],
+            urgency: insertedData.urgency
+          }
+        };
+        setHistory((prev) => [newItem, ...prev].slice(0, 10));
+      }
+
+      showToast('Analiza AI została ukończona i zapisana w chmurze!');
 
     } catch (error) {
       console.error('Błąd podczas analizy objawów:', error);
