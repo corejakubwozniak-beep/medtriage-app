@@ -40,7 +40,10 @@ function App() {
   const [symptoms, setSymptoms] = useState('');
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<AnalysisResult | null>(CARDIAC_RESULT);
+  
+  // POPRAWKA: Domyślny stan ustawiony na null zamiast CARDIAC_RESULT
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  
   const [bookedFacility, setBookedFacility] = useState<Facility | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<any | null>(null);
   const [imageFile, setImageFile] = useState<{ base64: string; mimeType: string } | null>(null);
@@ -50,8 +53,9 @@ function App() {
   const [bulkEndDate, setBulkEndDate] = useState('');
   const [bulkStartTime, setBulkStartTime] = useState('08:00');
   const [bulkEndTime, setBulkEndTime] = useState('16:00');
-  const [slotDurationMinutes, setSlotDurationMinutes] = useState(20); // co ile minut wizyta
+  const [slotDurationMinutes, setSlotDurationMinutes] = useState(20);
   const [rodoAccepted, setRodoAccepted] = useState(false);
+
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => {
@@ -61,7 +65,6 @@ function App() {
   
   const [facilities, setFacilities] = useState<Facility[]>([]);
 
-  // Funkcja pobierająca placówki i ich terminy (wyciągnięta osobno, by móc ją wywołać bez reloadu)
   const fetchFacilities = async () => {
     try {
       const { data, error } = await supabase
@@ -107,12 +110,9 @@ function App() {
     }
   };
 
-  // Funkcja pobierająca zarezerwowane wizyty dla administratora
-  // Zaktualizowana funkcja uwzględniająca Multi-tenancy
   const fetchBookedAppointments = async () => {
     if (!session?.user?.id) return;
 
-    // Najpierw sprawdzamy, która placówka jest przypisana do zalogowanego użytkownika
     const { data: facilityData, error: facError } = await supabase
       .from('facilities')
       .select('id')
@@ -120,12 +120,10 @@ function App() {
       .single();
 
     if (facError || !facilityData) {
-      // Jeśli konto nie jest przypisane do żadnej placówki, nie pobieramy nic lub pobieramy pustą listę
       setBookedAppointments([]);
       return;
     }
 
-    // Pobieramy zarezerwowane wizyty WYŁĄCZNIE dla tej konkretnej placówki
     const { data, error } = await supabase
       .from('appointments')
       .select(`
@@ -145,11 +143,11 @@ function App() {
       setBookedAppointments(data);
     }
   };
+
   useEffect(() => {
     fetchFacilities();
   }, []);
 
- // Automatyczne wczytywanie historii z chmury po wpisaniu telefonu
   useEffect(() => {
     const phone = patientPhone.trim();
     const phoneRegex = /^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{3,6}$/;
@@ -261,12 +259,31 @@ function App() {
     try {
       const rawAiResult = await analyzeSymptomsWithGemini(symptoms, imageFile);
 
+      // POPRAWKA: Weryfikacja, czy odpowiedź z Gemini nie jest komunikatem błędu
+      if (
+        rawAiResult.error ||
+        rawAiResult.explanation?.includes('Nie udało się') ||
+        rawAiResult.direction === 'Błąd analizy'
+      ) {
+        throw new Error(
+          rawAiResult.explanation ||
+            'Nie udało się połączyć z modelem AI. Sprawdź klucz API Gemini.'
+        );
+      }
+
       const mappedResult: AnalysisResult = {
         direction: rawAiResult.direction || 'Diagnostyka ogólna',
-        directionNote: rawAiResult.explanation || 'Przeanalizowano opisane objawy oraz załączone materiały.',
+        directionNote:
+          rawAiResult.explanation ||
+          'Przeanalizowano opisane objawy oraz załączone materiały.',
         specialist: rawAiResult.specialist || 'Lekarz Rodzinny',
         specialistNote: `Sugerowana konsultacja: ${rawAiResult.specialist || 'Lekarz Rodzinny'}.`,
-        tests: rawAiResult.tests || rawAiResult.recommendedTests || ['Morfologia krwi', 'Badanie ogólne'],
+        tests:
+          rawAiResult.tests ||
+          rawAiResult.recommendedTests || [
+            'Morfologia krwi',
+            'Badanie ogólne',
+          ],
         urgency: (['Planowy', 'Standardowy', 'Pilny'].includes(rawAiResult.priority)
           ? rawAiResult.priority
           : 'Standardowy') as AnalysisResult['urgency'],
@@ -275,7 +292,7 @@ function App() {
       setProgress(100);
       setResult(mappedResult);
 
-      // NOWY ZAPIS W CHMURZE (Supabase):
+      // Zapisujemy analizę w chmurze TYLKO jeśli odczyt zakończył się sukcesem
       const phoneToUse = patientPhone.trim() || 'anonim';
 
       const { data: insertedData, error: dbError } = await supabase
@@ -288,8 +305,8 @@ function App() {
             specialist: mappedResult.specialist,
             urgency: mappedResult.urgency,
             tests: mappedResult.tests,
-            has_image: !!imageFile
-          }
+            has_image: !!imageFile,
+          },
         ])
         .select()
         .single();
@@ -306,17 +323,22 @@ function App() {
             specialist: insertedData.specialist,
             specialistNote: mappedResult.specialistNote,
             tests: insertedData.tests || [],
-            urgency: insertedData.urgency
-          }
+            urgency: insertedData.urgency,
+          },
         };
         setHistory((prev) => [newItem, ...prev].slice(0, 10));
       }
 
       showToast('Analiza AI została ukończona i zapisana w chmurze!');
-
-    } catch (error) {
+    } catch (error: any) {
       console.error('Błąd podczas analizy objawów:', error);
-      showToast('Wystąpił błąd podczas analizy AI.', 'error');
+      
+      // Wyświetlenie czytelnego błędu użytkownikowi zamiast zielonego sukcesu
+      showToast(
+        error.message || 'Wystąpił błąd podczas analizy AI. Spróbuj ponownie.',
+        'error'
+      );
+      setResult(null);
     } finally {
       clearInterval(interval);
       setLoading(false);
@@ -327,7 +349,6 @@ function App() {
     <div className="min-h-screen print:bg-white print:py-0">
       <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14 print:px-0 print:py-0 print:max-w-none">
         
-        {/* Przełącznik widoku administratora / pacjenta */}
         <button 
           onClick={() => setIsAdminView(!isAdminView)}
           className="text-xs text-ink-400 hover:text-sage-600 transition-colors mt-2 cursor-pointer font-medium"
@@ -355,7 +376,6 @@ function App() {
           </p>
         </header>
 
-        {/* Disclaimer banner */}
         <div className="mt-6 flex items-start gap-3 rounded-2xl border border-sand-200 bg-sand-50/70 px-4 py-3.5 animate-fade-up print:hidden" style={{ animationDelay: '0.05s' }}>
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-sand-500" />
           <p className="text-[0.82rem] leading-relaxed text-ink-700">
@@ -364,7 +384,6 @@ function App() {
           </p>
         </div>
 
-        {/* --- PANEL ADMINISTRACYJNY LUB LOGOWANIE --- */}
         {isAdminView && (
           !session ? (
             <section className="mt-7 animate-fade-up max-w-sm mx-auto print:hidden">
@@ -420,7 +439,6 @@ function App() {
                 <h2 className="text-lg font-bold text-ink-900 mb-2">Panel Zarządzania Placówki</h2>
                 <p className="text-xs text-ink-500 mb-6">Jesteś zalogowany. Możesz dodawać wolne terminy oraz zarządzać zarezerwowanymi wizytami pacjentów.</p>
 
-                {/* Sekcja 1: Dodawanie terminów */}
                 <div className="rounded-2xl border border-ink-100 bg-sage-50/30 p-5 mb-8">
                   <h3 className="text-sm font-bold text-ink-900 mb-3">📅 Dodaj nowy wolny termin</h3>
                   <div className="space-y-4">
@@ -475,7 +493,6 @@ function App() {
                           showToast('Termin został pomyślnie dodany do bazy!');
                           setNewDate('');
                           setNewTime('');
-                          // Zamiast window.location.reload() odświeżamy dane w stanie React:
                           fetchFacilities();
                         }
                       }}
@@ -486,7 +503,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Sekcja 2: Lista zarezerwowanych wizyt */}
                 <div>
                   <h3 className="text-sm font-bold text-ink-900 mb-3">📋 Zarezerwowane wizyty pacjentów</h3>
                   {bookedAppointments.length > 0 ? (
@@ -520,7 +536,6 @@ function App() {
                                 
                                 if (!error) {
                                   showToast('Zwolniono termin pomyślnie.');
-                                  // Odświeżamy stany bez reloadu strony:
                                   fetchFacilities();
                                   fetchBookedAppointments();
                                 } else {
@@ -545,7 +560,6 @@ function App() {
           )
         )}
 
-        {/* Formularz pacjenta */}
         <section className="mt-7 animate-fade-up print:hidden" style={{ animationDelay: '0.1s' }}>
           <form
             onSubmit={handleSubmit}
@@ -924,7 +938,6 @@ function App() {
                   Wypełnij dane, aby potwierdzić termin. Wyniki diagnozy AI zostaną automatycznie przekazane do lekarza.
                 </p>
 
-                {/* ZADANIE 3: Logika bezpieczeństwa i stanów krytycznych (Emergency Override) */}
                 {result?.urgency === 'Pilny' && (
                   <div className="mt-4 w-full rounded-2xl bg-red-50 border border-red-200 p-4 text-left">
                     <p className="text-xs font-bold text-red-700 uppercase tracking-wider flex items-center gap-1.5">
@@ -973,7 +986,6 @@ function App() {
                     />
                   </div>
 
-                  {/* CHECKBOX RODO I ZGÓD MEDYCZNYCH */}
                   <div className="mt-3 flex items-start gap-2.5 pt-2">
                     <input 
                       type="checkbox" 
@@ -990,7 +1002,6 @@ function App() {
 
                 <button
                   onClick={async () => {
-                    // ZADANIE 4: Walidacja danych wejściowych (Validation Logic)
                     if (!patientName.trim()) {
                       showToast('Proszę podać imię i nazwisko pacjenta.', 'error');
                       return;
@@ -1002,7 +1013,6 @@ function App() {
                       return;
                     }
 
-                    // WALIDACJA RODO
                     if (!rodoAccepted) {
                       showToast('Musisz zaakceptować zgody RODO, aby kontynuować.', 'error');
                       return;
@@ -1012,7 +1022,6 @@ function App() {
                       const patientData = `Pacjent: ${patientName}, Tel: ${patientPhone}`;
                       const triageInfo = result ? `${result.direction} (Priorytet: ${result.urgency})` : 'Brak danych AI';
 
-                      // NOWA LOGIKA: Atomowa transakcja zapobiegająca podwójnej rezerwacji (Double-Booking)
                       const { data: updatedSlots, error } = await supabase
                         .from('appointments')
                         .update({ 
@@ -1021,7 +1030,7 @@ function App() {
                           triage_direction: triageInfo
                         })
                         .eq('id', selectedSlot.id)
-                        .eq('status', 'available') // Zaktualizuje tylko wtedy, gdy slot wciąż jest wolny!
+                        .eq('status', 'available')
                         .select();
 
                       if (error) {
@@ -1033,14 +1042,12 @@ function App() {
                         showToast('Przykro nam, ale ten termin został właśnie zajęty przez inną osobę!', 'error');
                         setBookedFacility(null);
                         setSelectedSlot(null);
-                        fetchFacilities(); // Odświeżamy listę, by usunąć zajęty slot z ekranu
+                        fetchFacilities();
                         return;
                       }
 
-                      // Sukces - termin został pomyślnie zarezerwowany dla nas
                       showToast('Wizyta została pomyślnie zarezerwowana!');
 
-                      // WYWOŁANIE FUNKCJI W TLE
                       supabase.functions.invoke('send-booking-notification', {
                         body: {
                           patientName: patientName.trim(),
@@ -1071,7 +1078,6 @@ function App() {
           </div>
         )}
 
-        {/* Powiadomienie Toast */}
         {toast && (
           <div className="fixed bottom-6 right-6 z-50 animate-fade-up">
             <div className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 shadow-card border backdrop-blur-md ${
@@ -1089,7 +1095,6 @@ function App() {
           </div>
         )}
 
-        {/* Stopka */}
         <footer className="mt-10 text-center print:hidden">
           <p className="text-xs text-ink-400">
             MedTriage · Asystent wsparcia diagnostycznego · Nie jest urządzeniem medycznym
