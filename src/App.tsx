@@ -51,6 +51,7 @@ function App() {
   const [bulkStartTime, setBulkStartTime] = useState('08:00');
   const [bulkEndTime, setBulkEndTime] = useState('16:00');
   const [slotDurationMinutes, setSlotDurationMinutes] = useState(20); // co ile minut wizyta
+  const [rodoAccepted, setRodoAccepted] = useState(false);
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => {
@@ -971,6 +972,20 @@ function App() {
                       className="w-full rounded-xl border border-ink-200 bg-white px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
                     />
                   </div>
+
+                  {/* CHECKBOX RODO I ZGÓD MEDYCZNYCH */}
+                  <div className="mt-3 flex items-start gap-2.5 pt-2">
+                    <input 
+                      type="checkbox" 
+                      id="rodoCheckbox"
+                      checked={rodoAccepted}
+                      onChange={(e) => setRodoAccepted(e.target.checked)}
+                      className="mt-1 h-4 w-4 rounded border-ink-300 text-sage-600 focus:ring-sage-400 cursor-pointer"
+                    />
+                    <label htmlFor="rodoCheckbox" className="text-[0.75rem] leading-relaxed text-ink-600 cursor-pointer">
+                      Wyrażam zgodę na przetwarzanie moich danych osobowych oraz informacji o stanie zdrowia w celu rezerwacji wizyty i przekazania wyników triażu do wybranej placówki medycznej (zgodnie z RODO).
+                    </label>
+                  </div>
                 </div>
 
                 <button
@@ -984,6 +999,12 @@ function App() {
                     const phoneRegex = /^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{3,6}$/;
                     if (!phoneRegex.test(patientPhone.trim())) {
                       showToast('Wpisz poprawny numer telefonu (np. 123456789).', 'error');
+                      return;
+                    }
+
+                    // WALIDACJA RODO
+                    if (!rodoAccepted) {
+                      showToast('Musisz zaakceptować zgody RODO, aby kontynuować.', 'error');
                       return;
                     }
 
