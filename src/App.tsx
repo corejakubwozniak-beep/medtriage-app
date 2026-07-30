@@ -1039,10 +1039,26 @@ function App() {
 
                       // Sukces - termin został pomyślnie zarezerwowany dla nas
                       showToast('Wizyta została pomyślnie zarezerwowana!');
+
+                      // WYWOŁANIE FUNKCJI W TLE
+                      supabase.functions.invoke('send-booking-notification', {
+                        body: {
+                          patientName: patientName.trim(),
+                          patientPhone: patientPhone.trim(),
+                          date: selectedSlot.date,
+                          time: selectedSlot.time.slice(0, 5),
+                          facilityName: bookedFacility.name,
+                          triageInfo: result ? `${result.direction} (Priorytet: ${result.urgency})` : 'Diagnostyka ogólna'
+                        }
+                      }).catch((err) => {
+                        console.error('Błąd wysyłki powiadomienia w tle:', err);
+                      });
+                      
                       setBookedFacility(null);
                       setSelectedSlot(null);
                       setPatientName('');
                       setPatientPhone('');
+                      setRodoAccepted(false);
                       fetchFacilities();
                     }
                   }}
