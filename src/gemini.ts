@@ -3,10 +3,19 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
 
-// Funkcja pomocnicza do automatycznego ponawiania w przypadku błędu 503 (przeciążenie)
-async function callGeminiWithRetry(fn: () => Promise<any>, retries = 3, delay = 2000) {
+// Lista modeli według priorytetu (od głównego do zapasowych)
+const FALLBACK_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-1.5-flash',
+  'gemini-2.5-pro'
+];
+
+// Funkcja próbująca wywołać model z opóźnieniem (Retry)
+async function callWithRetry(modelName: string, parts: any[], retries = 2, delay = 1500): Promise<any> {
+  const model = genAI.getGenerativeModel({ model: modelName });
+  
   try {
-    return await fn();
+    return await model.generateContent({ contents: [{ role: 'user', parts }] });
   } catch (error: any) {
     const isOverloaded = 
       error.message?.includes('503') || 
@@ -14,17 +23,16 @@ async function callGeminiWithRetry(fn: () => Promise<any>, retries = 3, delay = 
       error.message?.includes('high demand');
 
     if (retries > 0 && isOverloaded) {
-      console.warn(`Model AI jest przeciążony (503). Ponawiam próbę za ${delay / 1000}s... (Pozostało prób: ${retries})`);
+      console.warn(`[${modelName}] Przeciążony (503). Ponawiam za ${delay / 1000}s...`);
       await new Promise((resolve) => setTimeout(resolve, delay));
-      return callGeminiWithRetry(fn, retries - 1, delay * 1.5);
+      return callWithRetry(modelName, parts, retries - 1, delay * 1.5);
     }
     throw error;
   }
 }
 
+// Główna funkcja z automatycznym przełączaniem modelu w razie awarii (Fallback)
 export async function analyzeSymptomsWithGemini(symptoms: string, imageFile?: { base64: string; mimeType: string } | null) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
-
   const parts: any[] = [];
   if (symptoms.trim()) {
     parts.push({ text: symptoms });
@@ -50,18 +58,23 @@ export async function analyzeSymptomsWithGemini(symptoms: string, imageFile?: { 
     }`
   });
 
-  const response = await callGeminiWithRetry(async () => {
-    const result = await model.generateContent({ contents: [{ role: 'user', parts }] });
-    return result;
-  });
-
-  const responseText = response.response.text();
-  
-  try {
-    const cleanJsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleanJsonText);
-  } catch (e) {
-    console.error('Błąd parsowania JSON z Gemini:', responseText);
-    throw new Error('Nie udało się przetworzyć odpowiedzi AI.');
+  // Próbujemy po kolei każdego modelu z listy
+  let lastError = null;
+  for (const modelName of FALLBACK_MODELS) {
+    try {
+      console.log(`Próba analizy przy użyciu modelu: ${modelName}`);
+      const response = await callWithRetry(modelName, parts);
+      const responseText = response.response.text();
+      
+      const cleanJsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(cleanJsonText);
+    } catch (error: any) {
+      console.warn(`Model ${modelName} nie zadziałał. Przełączam na model zapasowy...`, error.message);
+      lastError = error;
+    }
   }
+
+  // Jeśli żaden model nie zadziałał (skrajny przypadek)
+  console.error('Wszystkie modele AI zawiodły:', lastError);
+  throw new Error('Serwery AI są w tej chwili niedostępne. Spróbuj ponownie za minutę.');
 }
