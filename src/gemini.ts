@@ -23,7 +23,7 @@ async function callGeminiWithRetry(fn: () => Promise<any>, retries = 3, delay = 
 }
 
 export async function analyzeSymptomsWithGemini(symptoms: string, imageFile?: { base64: string; mimeType: string } | null) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
   const parts: any[] = [];
   if (symptoms.trim()) {
