@@ -1,7 +1,7 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { analyzeSymptomsWithGemini } from './gemini';
 import { supabase } from './supabase';
-import { CARDIAC_RESULT, URGENCY_STYLES } from './data';
+import { URGENCY_STYLES } from './data';
 import { AnalysisResult, Facility, HistoryItem } from './types';
 import {
   Stethoscope,
@@ -41,7 +41,6 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   
-  // POPRAWKA: Domyślny stan ustawiony na null zamiast CARDIAC_RESULT
   const [result, setResult] = useState<AnalysisResult | null>(null);
   
   const [bookedFacility, setBookedFacility] = useState<Facility | null>(null);
@@ -49,11 +48,6 @@ function App() {
   const [imageFile, setImageFile] = useState<{ base64: string; mimeType: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [bulkStartDate, setBulkStartDate] = useState('');
-  const [bulkEndDate, setBulkEndDate] = useState('');
-  const [bulkStartTime, setBulkStartTime] = useState('08:00');
-  const [bulkEndTime, setBulkEndTime] = useState('16:00');
-  const [slotDurationMinutes, setSlotDurationMinutes] = useState(20);
   const [rodoAccepted, setRodoAccepted] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -144,7 +138,6 @@ function App() {
     }
   };
 
-  // Automatyczne pobieranie sesji i nasłuch na logowanie/wylogowanie
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -158,6 +151,13 @@ function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (session && isAdminView) {
+      fetchBookedAppointments();
+      fetchFacilities();
+    }
+  }, [session, isAdminView]);
 
   useEffect(() => {
     const phone = patientPhone.trim();
@@ -200,7 +200,7 @@ function App() {
     if (error) {
       showToast('Błąd logowania: Nieprawidłowy email lub hasło.', 'error');
     } else {
-      setSession(data.session); // <-- KLUCZOWA POPRAWKA: Zapisujemy sesję w stanie Reacta
+      setSession(data.session);
       setEmail('');
       setPassword('');
       showToast('Zalogowano pomyślnie do panelu placówki!');
@@ -209,7 +209,7 @@ function App() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setSession(null); // <-- KLUCZOWA POPRAWKA: Czyścimy sesję przy wylogowaniu
+    setSession(null);
     showToast('Wylogowano pomyślnie.');
   };
 
@@ -272,7 +272,6 @@ function App() {
     try {
       const rawAiResult = await analyzeSymptomsWithGemini(symptoms, imageFile);
 
-      // POPRAWKA: Weryfikacja, czy odpowiedź z Gemini nie jest komunikatem błędu
       if (
         rawAiResult.error ||
         rawAiResult.explanation?.includes('Nie udało się') ||
@@ -305,7 +304,6 @@ function App() {
       setProgress(100);
       setResult(mappedResult);
 
-      // Zapisujemy analizę w chmurze TYLKO jeśli odczyt zakończył się sukcesem
       const phoneToUse = patientPhone.trim() || 'anonim';
 
       const { data: insertedData, error: dbError } = await supabase
@@ -345,8 +343,6 @@ function App() {
       showToast('Analiza AI została ukończona i zapisana w chmurze!');
     } catch (error: any) {
       console.error('Błąd podczas analizy objawów:', error);
-      
-      // Wyświetlenie czytelnego błędu użytkownikowi zamiast zielonego sukcesu
       showToast(
         error.message || 'Wystąpił błąd podczas analizy AI. Spróbuj ponownie.',
         'error'
@@ -516,55 +512,94 @@ function App() {
                   </div>
                 </div>
 
-                <div>
-                  <h3 className="text-sm font-bold text-ink-900 mb-3">📋 Zarezerwowane wizyty pacjentów</h3>
+                <div className="mt-8 border-t border-ink-100 pt-8">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-ink-900">🎛️ Patient Flow Center (Kolejka Triażowa)</h3>
+                      <p className="text-xs text-ink-500 mt-1">Zarządzaj przepływem pacjentów na podstawie zaleceń sztucznej inteligencji.</p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <span className="inline-flex items-center rounded-xl bg-red-50 px-3 py-1 text-xs font-bold text-red-700 border border-red-100">
+                        🔴 Pilne: {bookedAppointments.filter((a: any) => a.urgency === 'Pilny').length}
+                      </span>
+                      <span className="inline-flex items-center rounded-xl bg-ink-50 px-3 py-1 text-xs font-bold text-ink-700 border border-ink-200">
+                        Wszystkie: {bookedAppointments.length}
+                      </span>
+                    </div>
+                  </div>
+
                   {bookedAppointments.length > 0 ? (
-                    <div className="space-y-3">
-                      {bookedAppointments.map((app) => (
-                        <div key={app.id} className="rounded-2xl border border-ink-100 bg-white p-4 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg">
-                                📅 {app.date} godz. {app.time.slice(0, 5)}
-                              </span>
-                              <span className="text-xs text-ink-500 font-medium">
-                                ({app.facilities?.name})
-                              </span>
-                            </div>
-                            <p className="mt-2 text-sm font-bold text-ink-900">
-                              👤 {app.patient_info || 'Brak danych pacjenta'}
-                            </p>
-                            <p className="text-xs text-sage-700 font-semibold mt-0.5">
-                              🩺 Triaż AI: {app.triage_direction || 'Brak danych'}
-                            </p>
-                          </div>
+                    <div className="space-y-4">
+                      {bookedAppointments.map((app: any) => (
+                        <div key={app.id} className={`relative overflow-hidden rounded-2xl border bg-white shadow-sm transition-all hover:shadow-card ${app.urgency === 'Pilny' ? 'border-red-200' : 'border-ink-100'}`}>
+                          {/* Kolorowy pasek priorytetu */}
+                          <div className={`absolute left-0 top-0 h-full w-1.5 ${app.urgency === 'Pilny' ? 'bg-red-500' : app.urgency === 'Standardowy' ? 'bg-amber-400' : 'bg-teal-500'}`} />
                           
-                          <button
-                            onClick={async () => {
-                              if (confirm('Czy na pewno chcesz zwolnić ten termin (anulować wizytę)?')) {
-                                const { error } = await supabase
-                                  .from('appointments')
-                                  .update({ status: 'available', patient_info: null, triage_direction: null })
-                                  .eq('id', app.id);
+                          <div className="p-5 pl-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <span className="text-xs font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-100">
+                                  📅 {app.date} godz. {app.time.slice(0, 5)}
+                                </span>
+                                <span className={`text-[0.65rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${app.urgency === 'Pilny' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-sand-50 text-sand-700 border-sand-200'}`}>
+                                  {app.urgency || 'Standardowy'}
+                                </span>
+                              </div>
+                              
+                              <h4 className="text-base font-bold text-ink-900 mb-1">
+                                👤 {app.patient_info || 'Pacjent nieznany'}
+                              </h4>
+                              
+                              <div className="mt-3 bg-sage-50/50 rounded-xl p-3 border border-sage-100">
+                                <p className="text-xs font-semibold text-sage-800 mb-1">🩺 Wstępny kierunek AI: {app.triage_direction}</p>
+                                <p className="text-xs text-ink-600 leading-relaxed">{app.triage_summary || 'Brak dodatkowego opisu'}</p>
                                 
-                                if (!error) {
-                                  showToast('Zwolniono termin pomyślnie.');
-                                  fetchFacilities();
-                                  fetchBookedAppointments();
-                                } else {
-                                  showToast('Błąd podczas zwalniania terminu.', 'error');
-                                }
-                              }
-                            }}
-                            className="self-start sm:self-center text-xs font-semibold text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-xl border border-red-200 transition-colors cursor-pointer"
-                          >
-                            Anuluj / Zwolnij termin
-                          </button>
+                                {app.preliminary_tests && app.preliminary_tests.length > 0 && (
+                                  <div className="mt-2 pt-2 border-t border-sage-200/50">
+                                    <p className="text-[0.65rem] font-bold text-ink-400 uppercase tracking-wider mb-1">Zalecane badania przed wizytą:</p>
+                                    <p className="text-xs text-ink-700">{Array.isArray(app.preliminary_tests) ? app.preliminary_tests.join(', ') : app.preliminary_tests}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div className="flex flex-col gap-2 shrink-0 sm:w-48">
+                              <button
+                                onClick={() => showToast('Powiadomienie z przypomnieniem o badaniach zostało wysłane do pacjenta (Symulacja).')}
+                                className="w-full text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 px-4 py-2.5 rounded-xl border border-teal-200 transition-colors cursor-pointer"
+                              >
+                                Zatwierdź i Powiadom
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (confirm('Czy na pewno chcesz anulować wizytę i zwolnić termin dla innych pacjentów?')) {
+                                    const { error } = await supabase
+                                      .from('appointments')
+                                      .update({ status: 'available', patient_info: null, triage_direction: null, urgency: null, triage_summary: null, preliminary_tests: null })
+                                      .eq('id', app.id);
+                                    
+                                    if (!error) {
+                                      showToast('Zwolniono termin pomyślnie.');
+                                      fetchFacilities();
+                                      fetchBookedAppointments();
+                                    }
+                                  }
+                                }}
+                                className="w-full text-xs font-semibold text-red-600 bg-white hover:bg-red-50 px-4 py-2.5 rounded-xl border border-red-200 transition-colors cursor-pointer"
+                              >
+                                Anuluj / Zwolnij slot
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-ink-400 italic bg-sage-50/40 p-4 rounded-2xl text-center">Brak zarezerwowanych wizyt w systemie.</p>
+                    <div className="flex flex-col items-center justify-center py-10 px-4 bg-sage-50/40 rounded-2xl border border-ink-100 border-dashed">
+                      <span className="text-2xl mb-2">🌿</span>
+                      <p className="text-sm font-semibold text-ink-700">Kolejka triażowa jest pusta.</p>
+                      <p className="text-xs text-ink-500 text-center max-w-xs mt-1">Brak nowych wizyt. Odpocznij chwilę lub dodaj nowe wolne terminy do grafiku.</p>
+                    </div>
                   )}
                 </div>
 
@@ -1033,14 +1068,17 @@ function App() {
 
                     if (selectedSlot) {
                       const patientData = `Pacjent: ${patientName}, Tel: ${patientPhone}`;
-                      const triageInfo = result ? `${result.direction} (Priorytet: ${result.urgency})` : 'Brak danych AI';
-
+                      
+                      // KLUCZOWA POPRAWKA - Zapisywanie pełnych danych z AI
                       const { data: updatedSlots, error } = await supabase
                         .from('appointments')
                         .update({ 
                           status: 'booked',
                           patient_info: patientData,
-                          triage_direction: triageInfo
+                          triage_direction: result ? result.specialist : 'Ogólna diagnostyka',
+                          urgency: result ? result.urgency : 'Standardowy',
+                          triage_summary: result ? result.directionNote : 'Brak dodatkowego opisu',
+                          preliminary_tests: result ? result.tests : []
                         })
                         .eq('id', selectedSlot.id)
                         .eq('status', 'available')
@@ -1110,7 +1148,7 @@ function App() {
 
         <footer className="mt-10 text-center print:hidden">
           <p className="text-xs text-ink-400">
-            MedTriage · Asystent wsparcia diagnostycznego · Nie jest urządzeniem medycznym
+            MedTriage · System wspomagający organizację przepływu pacjentów (CDSS) · Nie stanowi wyrobu medycznego.
           </p>
         </footer>
       </div>
