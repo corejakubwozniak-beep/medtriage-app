@@ -26,7 +26,7 @@ import {
   Clock,
 } from 'lucide-react';
 
-// === KROK 2: Blokada przed jednoczesnymi żądaniami (Singleton Promise) ===
+// === Blokada przed jednoczesnymi żądaniami (Singleton Promise) ===
 let refreshPromise: Promise<any> | null = null;
 
 async function lockedRefresh() {
@@ -40,23 +40,6 @@ async function lockedRefresh() {
 }
 
 function App() {
-  // === KROK 1: Globalny nasłuchiwacz błędów wylogowania i czyszczenia tokenów ===
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      const authEvent = event as string;
-      if (authEvent === 'TOKEN_REFRESH_FAILED' || authEvent === 'SIGNED_OUT') {
-        localStorage.clear();
-        sessionStorage.clear();
-      }
-      setSession(session);
-    });
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [])
   const [bookedAppointments, setBookedAppointments] = useState<any[]>([]);
   const [patientName, setPatientName] = useState('');
   const [patientPhone, setPatientPhone] = useState('');
@@ -134,10 +117,9 @@ function App() {
     }
   };
 
- const fetchBookedAppointments = async () => {
+  const fetchBookedAppointments = async () => {
     if (!session?.user?.id) return;
 
-    // Pobieramy placówkę jako tablicę, co całkowicie eliminuje błąd 406
     const { data: facilityDataArray, error: facError } = await supabase
       .from('facilities')
       .select('id')
@@ -170,14 +152,18 @@ function App() {
     }
   };
 
+  // === Nasłuchiwacz stanu autoryzacji z zabezpieczeniem 429 ===
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const authEvent = event as string;
+      if (authEvent === 'TOKEN_REFRESH_FAILED' || authEvent === 'SIGNED_OUT') {
+        localStorage.clear();
+        sessionStorage.clear();
+      }
       setSession(session);
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
     });
 
@@ -189,7 +175,7 @@ function App() {
       fetchBookedAppointments();
       fetchFacilities();
     }
-  }, []);
+  }, [session, isAdminView]);
 
   useEffect(() => {
     const phone = patientPhone.trim();
@@ -224,7 +210,7 @@ function App() {
       }
       fetchCloudHistory();
     }
-  }, []);
+  }, [patientPhone]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -443,6 +429,7 @@ function App() {
                     <input 
                       type="email" 
                       value={email}
+                      autoComplete="email"
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
                       required
@@ -453,6 +440,7 @@ function App() {
                     <input 
                       type="password" 
                       value={password}
+                      autoComplete="current-password"
                       onChange={(e) => setPassword(e.target.value)}
                       className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50"
                       required
@@ -564,7 +552,6 @@ function App() {
                     <div className="space-y-4">
                       {bookedAppointments.map((app: any) => (
                         <div key={app.id} className={`relative overflow-hidden rounded-2xl border bg-white shadow-sm transition-all hover:shadow-card ${app.urgency === 'Pilny' ? 'border-red-200' : 'border-ink-100'}`}>
-                          {/* Kolorowy pasek priorytetu */}
                           <div className={`absolute left-0 top-0 h-full w-1.5 ${app.urgency === 'Pilny' ? 'bg-red-500' : app.urgency === 'Standardowy' ? 'bg-amber-400' : 'bg-teal-500'}`} />
                           
                           <div className="p-5 pl-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
@@ -1101,7 +1088,6 @@ function App() {
                     if (selectedSlot) {
                       const patientData = `Pacjent: ${patientName}, Tel: ${patientPhone}`;
                       
-                      // KLUCZOWA POPRAWKA - Zapisywanie pełnych danych z AI
                       const { data: updatedSlots, error } = await supabase
                         .from('appointments')
                         .update({ 
