@@ -104,19 +104,21 @@ function App() {
     }
   };
 
-  const fetchBookedAppointments = async () => {
+ const fetchBookedAppointments = async () => {
     if (!session?.user?.id) return;
 
-    const { data: facilityData, error: facError } = await supabase
+    // Pobieramy placówkę jako tablicę, co całkowicie eliminuje błąd 406
+    const { data: facilityDataArray, error: facError } = await supabase
       .from('facilities')
       .select('id')
-      .eq('auth_user_id', session.user.id)
-      .single();
+      .eq('auth_user_id', session.user.id);
 
-    if (facError || !facilityData) {
+    if (facError || !facilityDataArray || facilityDataArray.length === 0) {
       setBookedAppointments([]);
       return;
     }
+
+    const facilityData = facilityDataArray[0];
 
     const { data, error } = await supabase
       .from('appointments')
