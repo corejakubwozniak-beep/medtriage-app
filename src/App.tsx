@@ -40,8 +40,7 @@ async function lockedRefresh() {
 }
 
 function App() {
-  // === KROK 1: Globalny nasłuchiwacz błędów wylogowania i czyszczenia tokenów ===
- // === Zabezpieczony nasłuchiwacz stanu autoryzacji ===
+  // === Zabezpieczony nasłuchiwacz stanu autoryzacji ===
   useEffect(() => {
     let isMounted = true;
 
@@ -70,6 +69,7 @@ function App() {
       subscription.unsubscribe();
     };
   }, []);
+
   const [bookedAppointments, setBookedAppointments] = useState<any[]>([]);
   const [patientName, setPatientName] = useState('');
   const [patientPhone, setPatientPhone] = useState('');
