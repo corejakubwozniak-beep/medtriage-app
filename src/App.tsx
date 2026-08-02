@@ -26,7 +26,37 @@ import {
   Clock,
 } from 'lucide-react';
 
+// === KROK 2: Blokada przed jednoczesnymi żądaniami (Singleton Promise) ===
+let refreshPromise: Promise<any> | null = null;
+
+async function lockedRefresh() {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = supabase.auth.refreshSession().finally(() => {
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
+}
+
 function App() {
+  // === KROK 1: Globalny nasłuchiwacz błędów wylogowania i czyszczenia tokenów ===
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const authEvent = event as string;
+      if (authEvent === 'TOKEN_REFRESH_FAILED' || authEvent === 'SIGNED_OUT') {
+        localStorage.clear();
+        sessionStorage.clear();
+      }
+      setSession(session);
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [])
   const [bookedAppointments, setBookedAppointments] = useState<any[]>([]);
   const [patientName, setPatientName] = useState('');
   const [patientPhone, setPatientPhone] = useState('');
@@ -159,7 +189,7 @@ function App() {
       fetchBookedAppointments();
       fetchFacilities();
     }
-  }, [session, isAdminView]);
+  }, []);
 
   useEffect(() => {
     const phone = patientPhone.trim();
@@ -194,7 +224,7 @@ function App() {
       }
       fetchCloudHistory();
     }
-  }, [patientPhone]);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
