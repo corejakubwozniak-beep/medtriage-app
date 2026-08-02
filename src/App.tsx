@@ -182,24 +182,6 @@ function App() {
     }
   };
 
-  // === Nasłuchiwacz stanu autoryzacji z zabezpieczeniem 429 ===
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      const authEvent = event as string;
-      if (authEvent === 'TOKEN_REFRESH_FAILED' || authEvent === 'SIGNED_OUT') {
-        localStorage.clear();
-        sessionStorage.clear();
-      }
-      setSession(session);
-    });
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
   useEffect(() => {
     if (session && isAdminView) {
       fetchBookedAppointments();
