@@ -40,6 +40,23 @@ async function lockedRefresh() {
 }
 
 function App() {
+  // === KROK 1: Globalny nasłuchiwacz błędów wylogowania i czyszczenia tokenów ===
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const authEvent = event as string;
+      if (authEvent === 'TOKEN_REFRESH_FAILED' || authEvent === 'SIGNED_OUT') {
+        localStorage.clear();
+        sessionStorage.clear();
+      }
+      setSession(session);
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
   const [bookedAppointments, setBookedAppointments] = useState<any[]>([]);
   const [patientName, setPatientName] = useState('');
   const [patientPhone, setPatientPhone] = useState('');
