@@ -41,21 +41,34 @@ async function lockedRefresh() {
 
 function App() {
   // === KROK 1: Globalny nasłuchiwacz błędów wylogowania i czyszczenia tokenów ===
+ // === Zabezpieczony nasłuchiwacz stanu autoryzacji ===
   useEffect(() => {
+    let isMounted = true;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const authEvent = event as string;
       if (authEvent === 'TOKEN_REFRESH_FAILED' || authEvent === 'SIGNED_OUT') {
         localStorage.clear();
         sessionStorage.clear();
+        if (isMounted) setSession(null);
+        return;
       }
-      setSession(session);
+      if (isMounted) {
+        setSession(session);
+      }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    lockedRefresh().then(({ data: { session } }) => {
+      if (isMounted) setSession(session);
+    }).catch(() => {
+      // Ignorujemy błąd odświeżania, aby nie powodować pętli 429
+      if (isMounted) setSession(null);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
   const [bookedAppointments, setBookedAppointments] = useState<any[]>([]);
   const [patientName, setPatientName] = useState('');
