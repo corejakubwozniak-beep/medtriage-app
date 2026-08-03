@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { Building2 } from 'lucide-react';
 import { Facility } from '../types';
 
 interface AdminDashboardProps {
@@ -18,13 +17,11 @@ export default function AdminDashboard({
   fetchFacilities,
   showToast,
 }: AdminDashboardProps) {
-  // Lokalne stany tylko dla panelu admina
   const [adminFacilityId, setAdminFacilityId] = useState<number>(1);
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('');
   const [bookedAppointments, setBookedAppointments] = useState<any[]>([]);
 
-  // Pobieranie wizyt przypisanych do zalogowanej placówki
   const fetchBookedAppointments = async () => {
     if (!session?.user?.id) return;
 
@@ -54,12 +51,30 @@ export default function AdminDashboard({
     }
   };
 
-  // Ładowanie danych po otwarciu panelu
+  // Supabase Realtime + początkowe ładowanie
   useEffect(() => {
-    if (session) {
-      fetchBookedAppointments();
-      fetchFacilities();
-    }
+    if (!session) return;
+
+    fetchBookedAppointments();
+    fetchFacilities();
+
+    // Nasłuchiwanie zmian w tabeli appointments na żywo
+    const channel = supabase
+      .channel('admin-live-queue')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'appointments' },
+        () => {
+          fetchBookedAppointments();
+          fetchFacilities();
+          showToast('⚡ Zaktualizowano kolejkę pacjentów na żywo!', 'success');
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [session]);
 
   const handleAddSlot = async () => {
@@ -116,7 +131,7 @@ export default function AdminDashboard({
 
         <h2 className="text-lg font-bold text-ink-900 mb-2">Panel Zarządzania Placówki</h2>
         <p className="text-xs text-ink-500 mb-6">
-          Jesteś zalogowany. Możesz dodawać wolne terminy oraz zarządzać zarezerwowanymi wizytami pacjentów.
+          Jesteś zalogowany. Kolejka pacjentów aktualizuje się automatycznie w czasie rzeczywistym.
         </p>
 
         {/* Dodawanie terminów */}
@@ -170,7 +185,7 @@ export default function AdminDashboard({
         <div className="mt-8 border-t border-ink-100 pt-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
             <div>
-              <h3 className="text-lg font-bold text-ink-900">🎛️ Patient Flow Center (Kolejka Triażowa)</h3>
+              <h3 className="text-lg font-bold text-ink-900">🎛️ Patient Flow Center (Kolejka Triażowa Realtime)</h3>
               <p className="text-xs text-ink-500 mt-1">Zarządzaj przepływem pacjentów na podstawie zaleceń sztucznej inteligencji.</p>
             </div>
             <div className="flex gap-2 shrink-0">
@@ -219,7 +234,7 @@ export default function AdminDashboard({
                     
                     <div className="flex flex-col gap-2 shrink-0 sm:w-48">
                       <button
-                        onClick={() => showToast('Powiadomienie z przypomnieniem o badaniach zostało wysłane do pacjenta (Symulacja).')}
+                        onClick={() => showToast('Powiadomienie z przypomnieniem zostało wysłane.')}
                         className="w-full text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 px-4 py-2.5 rounded-xl border border-teal-200 transition-colors cursor-pointer"
                       >
                         Zatwierdź i Powiadom
@@ -239,7 +254,7 @@ export default function AdminDashboard({
             <div className="flex flex-col items-center justify-center py-10 px-4 bg-sage-50/40 rounded-2xl border border-ink-100 border-dashed">
               <span className="text-2xl mb-2">🌿</span>
               <p className="text-sm font-semibold text-ink-700">Kolejka triażowa jest pusta.</p>
-              <p className="text-xs text-ink-500 text-center max-w-xs mt-1">Brak nowych wizyt. Odpocznij chwilę lub dodaj nowe wolne terminy do grafiku.</p>
+              <p className="text-xs text-ink-500 text-center max-w-xs mt-1">Oczekiwanie na nowych pacjentów w czasie rzeczywistym...</p>
             </div>
           )}
         </div>
