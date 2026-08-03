@@ -107,7 +107,21 @@ export default function App() {
       }]).select().single();
 
       if (insertedData) {
-        setHistory((prev) => [{ id: insertedData.id.toString(), date: new Date(insertedData.created_at).toLocaleString(), symptoms: insertedData.symptoms, hasImage: insertedData.has_image, result: mappedResult }, ...prev].slice(0, 10));
+        setHistory((prev) => {
+          // 1. Tworzymy nową tablicę z dodanym aktualnym wynikiem
+          const newHistory = [{ 
+            id: insertedData.id.toString(), 
+            date: new Date(insertedData.created_at).toLocaleString(), 
+            symptoms: insertedData.symptoms, 
+            hasImage: insertedData.has_image, 
+            result: mappedResult 
+          }, ...prev].slice(0, 10);
+          
+          // 2. Od razu zapisujemy zaktualizowaną historię trwale do pamięci przeglądarki
+          localStorage.setItem('medtriage_history', JSON.stringify(newHistory));
+          
+          return newHistory;
+        });
       }
       showToast('Analiza zakończona pomyślnie!');
     } catch (error: any) {
