@@ -170,6 +170,13 @@ export default function App() {
             handleImageChange={(e) => {
               const file = e.target.files?.[0];
               if (!file) return;
+
+              // Zabezpieczenie przed zbyt dużym plikiem (max 5 MB)
+              if (file.size > 5 * 1024 * 1024) {
+                showToast('Zdjęcie jest za duże! Maksymalny rozmiar to 5 MB.', 'error');
+                return;
+              }
+
               const reader = new FileReader();
               reader.onloadend = () => {
                 setImageFile({ base64: (reader.result as string).split(',')[1], mimeType: file.type });
