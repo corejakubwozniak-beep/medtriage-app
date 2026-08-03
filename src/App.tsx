@@ -227,13 +227,24 @@ function App() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    
     if (error) {
       showToast('Błąd logowania: Nieprawidłowy email lub hasło.', 'error');
     } else {
-      setSession(data.session);
-      setEmail('');
-      setPassword('');
-      showToast('Zalogowano pomyślnie do panelu placówki!');
+      // WERYFIKACJA ROLI (Bezpieczeństwo)
+      const userRole = data.session?.user?.user_metadata?.role;
+      
+      if (userRole === 'admin') {
+        setSession(data.session);
+        setEmail('');
+        setPassword('');
+        showToast('Zalogowano pomyślnie do panelu placówki!');
+      } else {
+        // Jeśli użytkownik zalogował się poprawnie, ale nie ma roli admina:
+        await supabase.auth.signOut();
+        setSession(null);
+        showToast('Brak uprawnień. To konto nie należy do personelu medycznego.', 'error');
+      }
     }
   };
 
