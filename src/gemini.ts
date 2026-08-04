@@ -59,18 +59,23 @@ export async function analyzeSymptomsWithGemini(
       });
     }
 
-    // Wysłanie zapytania do modelu
+ // Wysłanie zapytania do modelu
     const result = await model.generateContent(promptData);
     const responseText = result.response.text();
 
-    // Czyszczenie odpowiedzi z ewentualnych znaczników markdown (jeśli Gemini mimo zakazu je doda)
-    const cleanedJsonString = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    // --- NOWY, KULOODPORNY MECHANIZM WYCIĄGANIA JSON-a ---
+    // Szukamy pierwszego wystąpienia znaku '{' i ostatniego '}'
+    const match = responseText.match(/\{[\s\S]*\}/);
+    
+    if (!match) {
+      throw new Error("Model AI nie zwrócił poprawnego formatu JSON.");
+    }
 
-    // Parsowanie bezpiecznego JSON-a
-    const aiResult = JSON.parse(cleanedJsonString);
+    // Parsowanie bezpiecznego, wyciętego JSON-a
+    const aiResult = JSON.parse(match[0]);
 
     return aiResult;
-
+    
   } catch (error: any) {
     console.error('Błąd podczas analizy Gemini API:', error);
     return {
