@@ -1,44 +1,21 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(apiKey);
-
-// Lista modeli według priorytetu (od głównego do zapasowych)
-const FALLBACK_MODELS = [
-  'gemini-3.5-flash-lite',
-  'gemini-3.6-flash',
-  'gemini-3.1-pro'
-];
-
-
-// Funkcja próbująca wywołać model z opóźnieniem (Retry)
-async function callWithRetry(modelName: string, parts: any[], retries = 2, delay = 1500): Promise<any> {
-  const model = genAI.getGenerativeModel({ model: modelName });
-  
-  try {
-    return await model.generateContent({ contents: [{ role: 'user', parts }] });
-  } catch (error: any) {
-    const isOverloaded = 
-      error.message?.includes('503') || 
-      error.status === 503 || 
-      error.message?.includes('high demand');
-
-    if (retries > 0 && isOverloaded) {
-      console.warn(`[${modelName}] Przeciążony (503). Ponawiam za ${delay / 1000}s...`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      return callWithRetry(modelName, parts, retries - 1, delay * 1.5);
-    }
-    throw error;
-  }
+// 1. Pobranie klucza API ze zmiennych środowiskowych
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+if (!apiKey) {
+  console.error("Brak klucza VITE_GEMINI_API_KEY w pliku .env");
 }
 
+const genAI = new GoogleGenerativeAI(apiKey || '');
+
+// 2. Rygorystyczny System Prompt (Guardrails)
 const SYSTEM_PROMPT = `Jesteś zaawansowanym, rygorystycznym asystentem medycznym AI (MedTriage) służącym WYŁĄCZNIE do wstępnego triażu zdrowia LUDZKIEGO. Nie jesteś uniwersalnym asystentem.
 
 ZASADY KRYTYCZNE (GUARDRAILS) – MUSISZ SIĘ DO NICH BEZWZGLĘDNIE STOSOWAĆ:
 1. ODRZUCANIE ZAPYTAŃ NIEMEDYCZNYCH: Jeśli użytkownik pyta o przepisy kulinarne, programowanie, zwierzęta (np. koty, psy), wpisuje bezsensowny ciąg znaków, lub wgrywa zdjęcie przedmiotu/zwierzęcia/krajobrazu, MUSISZ natychmiast przerwać analizę. W takim przypadku zwróć DOKŁADNIE taki obiekt JSON i nic więcej:
 {
   "direction": "Błąd analizy",
-  "explanation": "Zapytanie nie ma charakteru medycznego lub nie dotyczy zdrowia ludzkiego. Proszę opisać rzeczywiste objawy chorobowe.",
+  "explanation": "Zapytanie nie ma charakteru medycznego lub nie dotyczy zdrowia ludzkiego. Proszę opisać rzeczywiste objawy chorobowe lub wgrać poprawne wyniki badań.",
   "specialist": "Brak",
   "priority": "Standardowy",
   "tests": []
@@ -49,60 +26,60 @@ ZASADY KRYTYCZNE (GUARDRAILS) – MUSISZ SIĘ DO NICH BEZWZGLĘDNIE STOSOWAĆ:
 3. REGUŁA ZDJĘĆ: Jeśli obraz nie przedstawia ludzkiej zmiany skórnej, wypisu ze szpitala, wyników badań laboratoryjnych lub widocznego problemu medycznego człowieka, zastosuj Zasadę nr 1.
 
 FORMAT ODPOWIEDZI:
-Masz obowiązek zawsze zwracać surowy format JSON (bez znaczników markdown \`\`\`json). Twoja odpowiedź musi zgadzać się z tym schematem:
+Masz obowiązek zawsze zwracać surowy format JSON (bez znaczników markdown typu \`\`\`json). Odpowiedź musi zgadzać się z tym schematem:
 {
-  "direction": "string (np. Kardiologia lub 'Błąd analizy')",
-  "explanation": "string (krótkie medyczne uzasadnienie)",
-  "specialist": "string (np. Kardiolog)",
-  "priority": "string (MUSI BYĆ TYLKO JEDNO Z: 'Planowy', 'Standardowy', 'Pilny')",
-  "tests": ["string", "string"] (Tablica od 1 do 4 sugerowanych badań)
+  "direction": "string",
+  "explanation": "string",
+  "specialist": "string",
+  "priority": "string (MUSI BYĆ: 'Planowy', 'Standardowy' lub 'Pilny')",
+  "tests": ["string"]
 }`;
 
+// 3. Główna funkcja analizująca
+export async function analyzeSymptomsWithGemini(
+  symptoms: string, 
+  imageFile: { base64: string; mimeType: string } | null
+) {
+  try {
+    // Używamy modelu flash, który jest najszybszy i świetnie radzi sobie z JSON i obrazami
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-// Główna funkcja z automatycznym przełączaniem modelu w razie awarii (Fallback)
-export async function analyzeSymptomsWithGemini(symptoms: string, imageFile?: { base64: string; mimeType: string } | null) {
-  const parts: any[] = [];
-  if (symptoms.trim()) {
-    parts.push({ text: symptoms });
-  }
+    // Konstruowanie ostatecznego promptu
+    const finalPrompt = `${SYSTEM_PROMPT}\n\nOto dane od pacjenta do analizy:\nObjawy opisane przez pacjenta: "${symptoms || 'Brak opisu tekstowego, załączono tylko zdjęcie.'}"`;
 
-  if (imageFile) {
-    parts.push({
-      inlineData: {
-        data: imageFile.base64,
-        mimeType: imageFile.mimeType,
-      },
-    });
-  }
+    // Budowanie tablicy z treścią zapytania (tekst + opcjonalny obraz)
+    const promptData: any[] = [finalPrompt];
 
-  parts.push({
-    text: `Jesteś profesjonalnym systemem wsparcia decyzji medycznych (triaż AI). Przeanalizuj powyższe objawy lub załączone zdjęcie/wyniki i zwróć wynik WYŁĄCZNIE w formacie JSON (bez żadnego formatowania markdown typu \`\`\`json) o następującej strukturze:
-    {
-      "direction": "Kierunek diagnostyczny np. Kardiologia",
-      "explanation": "Szczegółowe wyjaśnienie i zalecenia",
-      "specialist": "Rekomendowany specjalista np. Kardiolog",
-      "tests": ["Badanie 1", "Badanie 2"],
-      "priority": "Standardowy lub Pilny"
-    }`
-  });
-
-  // Próbujemy po kolei każdego modelu z listy
-  let lastError = null;
-  for (const modelName of FALLBACK_MODELS) {
-    try {
-      console.log(`Próba analizy przy użyciu modelu: ${modelName}`);
-      const response = await callWithRetry(modelName, parts);
-      const responseText = response.response.text();
-      
-      const cleanJsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      return JSON.parse(cleanJsonText);
-    } catch (error: any) {
-      console.warn(`Model ${modelName} nie zadziałał. Przełączam na model zapasowy...`, error.message);
-      lastError = error;
+    if (imageFile) {
+      promptData.push({
+        inlineData: {
+          data: imageFile.base64,
+          mimeType: imageFile.mimeType,
+        },
+      });
     }
-  }
 
-  // Jeśli żaden model nie zadziałał (skrajny przypadek)
-  console.error('Wszystkie modele AI zawiodły:', lastError);
-  throw new Error('Serwery AI są w tej chwili niedostępne. Spróbuj ponownie za minutę.');
+    // Wysłanie zapytania do modelu
+    const result = await model.generateContent(promptData);
+    const responseText = result.response.text();
+
+    // Czyszczenie odpowiedzi z ewentualnych znaczników markdown (jeśli Gemini mimo zakazu je doda)
+    const cleanedJsonString = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    // Parsowanie bezpiecznego JSON-a
+    const aiResult = JSON.parse(cleanedJsonString);
+
+    return aiResult;
+
+  } catch (error: any) {
+    console.error('Błąd podczas analizy Gemini API:', error);
+    return {
+      error: true,
+      direction: 'Błąd analizy',
+      explanation: 'Wystąpił problem techniczny podczas łączenia z silnikiem AI. Spróbuj ponownie za chwilę.',
+      specialist: 'Brak',
+      priority: 'Standardowy',
+      tests: [],
+    };
+  }
 }
