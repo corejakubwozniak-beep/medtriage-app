@@ -1,6 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// 1. Pobranie klucza API ze zmiennych środowiskowych
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 if (!apiKey) {
   console.error("Brak klucza VITE_GEMINI_API_KEY w pliku .env");
@@ -8,7 +7,14 @@ if (!apiKey) {
 
 const genAI = new GoogleGenerativeAI(apiKey || '');
 
-// 2. Rygorystyczny System Prompt (Guardrails)
+// Definicja Twoich modeli Gemini
+const MODELS = {
+  lite: 'gemini-3.5-flash-lite',
+  flash: 'gemini-3.6-flash',
+  pro: 'gemini-3.1-pro',
+};
+
+// Rygorystyczny System Prompt (Guardrails)
 const SYSTEM_PROMPT = `Jesteś zaawansowanym, rygorystycznym asystentem medycznym AI (MedTriage) służącym WYŁĄCZNIE do wstępnego triażu zdrowia LUDZKIEGO. Nie jesteś uniwersalnym asystentem.
 
 ZASADY KRYTYCZNE (GUARDRAILS) – MUSISZ SIĘ DO NICH BEZWZGLĘDNIE STOSOWAĆ:
@@ -35,19 +41,20 @@ Masz obowiązek zawsze zwracać surowy format JSON (bez znaczników markdown typ
   "tests": ["string"]
 }`;
 
-// 3. Główna funkcja analizująca
 export async function analyzeSymptomsWithGemini(
   symptoms: string, 
   imageFile: { base64: string; mimeType: string } | null
 ) {
   try {
-    // Używamy modelu flash, który jest najszybszy i świetnie radzi sobie z JSON i obrazami
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    // --- INTELIGENTNY DOBÓR MODELU ---
+    // Jeśli pacjent załączył zdjęcie, używamy potężniejszego modelu Pro.
+    // Do samego tekstu używamy szybkiego modelu Flash.
+    const chosenModelName = imageFile ? MODELS.pro : MODELS.flash;
+    
+    const model = genAI.getGenerativeModel({ model: chosenModelName });
 
-    // Konstruowanie ostatecznego promptu
     const finalPrompt = `${SYSTEM_PROMPT}\n\nOto dane od pacjenta do analizy:\nObjawy opisane przez pacjenta: "${symptoms || 'Brak opisu tekstowego, załączono tylko zdjęcie.'}"`;
 
-    // Budowanie tablicy z treścią zapytania (tekst + opcjonalny obraz)
     const promptData: any[] = [finalPrompt];
 
     if (imageFile) {
@@ -59,23 +66,19 @@ export async function analyzeSymptomsWithGemini(
       });
     }
 
- // Wysłanie zapytania do modelu
     const result = await model.generateContent(promptData);
     const responseText = result.response.text();
 
-    // --- NOWY, KULOODPORNY MECHANIZM WYCIĄGANIA JSON-a ---
-    // Szukamy pierwszego wystąpienia znaku '{' i ostatniego '}'
+    // Kuloodporne wyciąganie JSON-a za pomocą RegEx
     const match = responseText.match(/\{[\s\S]*\}/);
     
     if (!match) {
       throw new Error("Model AI nie zwrócił poprawnego formatu JSON.");
     }
 
-    // Parsowanie bezpiecznego, wyciętego JSON-a
     const aiResult = JSON.parse(match[0]);
-
     return aiResult;
-    
+
   } catch (error: any) {
     console.error('Błąd podczas analizy Gemini API:', error);
     return {
