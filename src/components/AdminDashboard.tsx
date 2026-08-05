@@ -1,14 +1,18 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { Facility } from '../types';
+import { Facility, Appointment } from '../types';
+import { Session } from '@supabase/supabase-js';
+import { translations, Language } from '../i18n';
 
 interface AdminDashboardProps {
-  session: any;
+  session: Session; // Zamiast 'any'
   handleLogout: () => void;
   facilities: Facility[];
   fetchFacilities: () => void;
   showToast: (message: string, type?: 'success' | 'error') => void;
 }
+
+
 
 export default function AdminDashboard({
   session,
@@ -20,7 +24,7 @@ export default function AdminDashboard({
   const [adminFacilityId, setAdminFacilityId] = useState<number>(1);
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('');
-  const [bookedAppointments, setBookedAppointments] = useState<any[]>([]);
+  const [bookedAppointments, setBookedAppointments] = useState<Appointment[]>([]); // Zamiast any[]
 
   const fetchBookedAppointments = async () => {
     if (!session?.user?.id) return;
@@ -116,6 +120,25 @@ export default function AdminDashboard({
         fetchFacilities();
         fetchBookedAppointments();
       }
+    }
+  };
+
+  const handleSendNotification = async (app: Appointment) => {
+  try {
+    const { data, error } = await supabase.functions.invoke('send-notification', {
+      body: {
+        appointmentId: app.id,
+        patientInfo: app.patient_info,
+        facilityName: app.facilities?.name,
+        date: app.date,
+        time: app.time,
+      }
+    });
+
+      if (error) throw error;
+      showToast('⚡ Powiadomienie SMS/Email zostało wysłane do pacjenta!');
+    } catch (err: any) {
+      showToast('Błąd wysyłania powiadomienia: ' + err.message, 'error');
     }
   };
 
