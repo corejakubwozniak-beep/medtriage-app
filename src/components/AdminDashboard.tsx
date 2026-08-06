@@ -2,17 +2,15 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { Facility, Appointment } from '../types';
 import { Session } from '@supabase/supabase-js';
-import { translations, Language } from '../i18n';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface AdminDashboardProps {
-  session: Session; // Zamiast 'any'
+  session: Session;
   handleLogout: () => void;
   facilities: Facility[];
   fetchFacilities: () => void;
   showToast: (message: string, type?: 'success' | 'error') => void;
 }
-
-
 
 export default function AdminDashboard({
   session,
@@ -24,52 +22,57 @@ export default function AdminDashboard({
   const [adminFacilityId, setAdminFacilityId] = useState<number>(1);
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('');
-  const [bookedAppointments, setBookedAppointments] = useState<Appointment[]>([]); // Zamiast any[]
+  
+  const queryClient = useQueryClient();
 
-  const fetchBookedAppointments = async () => {
-    if (!session?.user?.id) return;
+  // Zamiast useState i useEffect - potężny hook z TanStack Query
+  const { data: bookedAppointments = [], isLoading } = useQuery({
+    queryKey: ['bookedAppointments', session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return [];
 
-    const { data: facilityDataArray, error: facError } = await supabase
-      .from('facilities')
-      .select('id')
-      .eq('auth_user_id', session.user.id);
+      // 1. Pobierz ID placówki przypisanej do zalogowanego administratora
+      const { data: facilityDataArray, error: facError } = await supabase
+        .from('facilities')
+        .select('id')
+        .eq('auth_user_id', session.user.id);
 
-    if (facError || !facilityDataArray || facilityDataArray.length === 0) {
-      setBookedAppointments([]);
-      return;
-    }
+      if (facError || !facilityDataArray || facilityDataArray.length === 0) {
+        return [];
+      }
 
-    const facilityData = facilityDataArray[0];
+      const facilityData = facilityDataArray[0];
 
-    const { data, error } = await supabase
-      .from('appointments')
-      .select(`*, facilities (name, address)`)
-      .eq('facility_id', facilityData.id)
-      .eq('status', 'booked')
-      .order('date', { ascending: true });
+      // 2. Pobierz zarezerwowane wizyty
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(`*, facilities (name, address)`)
+        .eq('facility_id', facilityData.id)
+        .eq('status', 'booked')
+        .order('date', { ascending: true });
 
-    if (error) {
-      console.error('Błąd pobierania zarezerwowanych wizyt:', error);
-    } else if (data) {
-      setBookedAppointments(data);
-    }
-  };
+      if (error) throw error;
+      return data as Appointment[];
+    },
+    enabled: !!session?.user?.id, // Wykonaj tylko, jeśli user jest zalogowany
+    staleTime: 60000, // Zatrzymuje cache przez 60 sekund (oszczędza odpytywanie bazy)
+  });
 
-  // Supabase Realtime + początkowe ładowanie
+  // Supabase Realtime + TanStack Query Invalidation
   useEffect(() => {
     if (!session) return;
 
-    fetchBookedAppointments();
     fetchFacilities();
 
-    // Nasłuchiwanie zmian w tabeli appointments na żywo
     const channel = supabase
       .channel('admin-live-queue')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'appointments' },
         () => {
-          fetchBookedAppointments();
+          // Zamiast ręcznie pobierać dane, informujemy TanStack Query, że stare są nieważne.
+          // System sam w tle zaktualizuje listę.
+          queryClient.invalidateQueries({ queryKey: ['bookedAppointments'] });
           fetchFacilities();
           showToast('⚡ Zaktualizowano kolejkę pacjentów na żywo!', 'success');
         }
@@ -79,7 +82,7 @@ export default function AdminDashboard({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [session]);
+  }, [session, queryClient, fetchFacilities, showToast]);
 
   const handleAddSlot = async () => {
     if (!newDate || !newTime) {
@@ -101,7 +104,7 @@ export default function AdminDashboard({
     }
   };
 
-  const handleCancelSlot = async (appId: string) => {
+  const handleCancelSlot = async (appId: number) => {
     if (window.confirm('Czy na pewno chcesz anulować wizytę i zwolnić termin dla innych pacjentów?')) {
       const { error } = await supabase
         .from('appointments')
@@ -118,27 +121,17 @@ export default function AdminDashboard({
       if (!error) {
         showToast('Zwolniono termin pomyślnie.');
         fetchFacilities();
-        fetchBookedAppointments();
+        queryClient.invalidateQueries({ queryKey: ['bookedAppointments'] }); // Odśwież kolejkę
       }
     }
   };
 
   const handleSendNotification = async (app: Appointment) => {
-  try {
-    const { data, error } = await supabase.functions.invoke('send-notification', {
-      body: {
-        appointmentId: app.id,
-        patientInfo: app.patient_info,
-        facilityName: app.facilities?.name,
-        date: app.date,
-        time: app.time,
-      }
-    });
-
-      if (error) throw error;
-      showToast('⚡ Powiadomienie SMS/Email zostało wysłane do pacjenta!');
+    try {
+      // Przygotowane pod Fazę z powiadomieniami
+      showToast(`Powiadomienie przygotowane do wysyłki dla: ${app.patient_info}`);
     } catch (err: any) {
-      showToast('Błąd wysyłania powiadomienia: ' + err.message, 'error');
+      showToast('Błąd wysyłania powiadomienia', 'error');
     }
   };
 
@@ -157,7 +150,7 @@ export default function AdminDashboard({
           Jesteś zalogowany. Kolejka pacjentów aktualizuje się automatycznie w czasie rzeczywistym.
         </p>
 
-        {/* Dodawanie terminów */}
+        {/* Formularz dodawania terminów */}
         <div className="rounded-2xl border border-ink-100 bg-sage-50/30 p-5 mb-8">
           <h3 className="text-sm font-bold text-ink-900 mb-3">📅 Dodaj nowy wolny termin</h3>
           <div className="space-y-4">
@@ -213,7 +206,7 @@ export default function AdminDashboard({
             </div>
             <div className="flex gap-2 shrink-0">
               <span className="inline-flex items-center rounded-xl bg-red-50 px-3 py-1 text-xs font-bold text-red-700 border border-red-100">
-                🔴 Pilne: {bookedAppointments.filter((a: any) => a.urgency === 'Pilny').length}
+                🔴 Pilne: {bookedAppointments.filter(a => a.urgency === 'Pilny').length}
               </span>
               <span className="inline-flex items-center rounded-xl bg-ink-50 px-3 py-1 text-xs font-bold text-ink-700 border border-ink-200">
                 Wszystkie: {bookedAppointments.length}
@@ -221,9 +214,13 @@ export default function AdminDashboard({
             </div>
           </div>
 
-          {bookedAppointments.length > 0 ? (
+          {isLoading ? (
+            <div className="text-center py-10 text-sm text-ink-500 animate-pulse">
+              Ładowanie kolejki pacjentów...
+            </div>
+          ) : bookedAppointments.length > 0 ? (
             <div className="space-y-4">
-              {bookedAppointments.map((app: any) => (
+              {bookedAppointments.map((app) => (
                 <div key={app.id} className={`relative overflow-hidden rounded-2xl border bg-white shadow-sm transition-all hover:shadow-card ${app.urgency === 'Pilny' ? 'border-red-200' : 'border-ink-100'}`}>
                   <div className={`absolute left-0 top-0 h-full w-1.5 ${app.urgency === 'Pilny' ? 'bg-red-500' : app.urgency === 'Standardowy' ? 'bg-amber-400' : 'bg-teal-500'}`} />
                   
@@ -257,7 +254,7 @@ export default function AdminDashboard({
                     
                     <div className="flex flex-col gap-2 shrink-0 sm:w-48">
                       <button
-                        onClick={() => showToast('Powiadomienie z przypomnieniem zostało wysłane.')}
+                        onClick={() => handleSendNotification(app)}
                         className="w-full text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 px-4 py-2.5 rounded-xl border border-teal-200 transition-colors cursor-pointer"
                       >
                         Zatwierdź i Powiadom
@@ -275,7 +272,7 @@ export default function AdminDashboard({
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-10 px-4 bg-sage-50/40 rounded-2xl border border-ink-100 border-dashed">
-              <span className="text-2xl mb-2">🌿</span>
+              <span className="text-2xl mb-2">🪹</span>
               <p className="text-sm font-semibold text-ink-700">Kolejka triażowa jest pusta.</p>
               <p className="text-xs text-ink-500 text-center max-w-xs mt-1">Oczekiwanie na nowych pacjentów w czasie rzeczywistym...</p>
             </div>
