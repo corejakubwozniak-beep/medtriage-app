@@ -43,7 +43,7 @@ serve(async (req: Request) => {
       },
       body: JSON.stringify({
         from: 'MedTriage System <powiadomienia@twoja-domena.pl>', // Musi to być zweryfikowana domena
-        to: ['adres_pacjenta@example.com'], // Docelowo ten adres przyjdzie razem z patientInfo z bazy
+        to: ['core.jakubwozniak@gmail.com'], // Docelowo ten adres przyjdzie razem z patientInfo z bazy
         subject: `Potwierdzenie wizyty na dzień ${date}`,
         html: emailHtml
       })
