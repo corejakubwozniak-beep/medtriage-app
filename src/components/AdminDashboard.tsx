@@ -3,6 +3,7 @@ import { supabase } from '../supabase';
 import { Facility, Appointment } from '../types';
 import { Session } from '@supabase/supabase-js';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import MfaManager from './MfaManager';
 
 interface AdminDashboardProps {
   session: Session;
@@ -22,7 +23,7 @@ export default function AdminDashboard({
   const [adminFacilityId, setAdminFacilityId] = useState<number>(1);
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('');
-  
+  const [isMfaVerified, setIsMfaVerified] = useState(false);
   const queryClient = useQueryClient();
 
   // Zamiast useState i useEffect - potężny hook z TanStack Query
@@ -134,6 +135,14 @@ export default function AdminDashboard({
       showToast('Błąd wysyłania powiadomienia', 'error');
     }
   };
+
+  if (!isMfaVerified) {
+    return (
+      <div className="mt-10 flex justify-center print:hidden">
+        <MfaManager onSuccess={() => setIsMfaVerified(true)} />
+      </div>
+    );
+  }
 
   return (
     <section className="mt-7 animate-fade-up print:hidden">
