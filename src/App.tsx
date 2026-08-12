@@ -11,6 +11,8 @@ import BookingModal from './components/BookingModal';
 import { useEffect } from 'react';
 import { supabase } from './supabase';
 import { Facility } from './types';
+import AdminDashboard from './components/AdminDashboard';
+import { Session } from '@supabase/supabase-js';
 
 const URGENCY_STYLES: Record<string, string> = {
   Planowy: 'bg-sage-100 text-sage-700 border-sage-200',
@@ -28,6 +30,10 @@ function App() {
   const t = translations[lang];
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isAdminView, setIsAdminView] = useState(false);
 
 const fetchFacilities = async () => {
   const { data, error } = await supabase
@@ -39,8 +45,17 @@ const fetchFacilities = async () => {
 };
 
 useEffect(() => {
-  fetchFacilities();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
 }, []);
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!symptoms.trim() || loading) return;
@@ -63,14 +78,93 @@ useEffect(() => {
     setLoading(false);
   };
 
+  const handleAdminLogin = async (e: FormEvent) => {
+    e.preventDefault();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) alert('Błąd logowania: ' + error.message);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsAdminView(false);
+  };
+
   return (
     <div className="min-h-screen">
       <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14">
-        
-        {/* Wielojęzyczny Header */}
-        <header className="animate-fade-up">
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-3">
+
+
+      {/* W sekcji nagłówka App.tsx dodaj przycisk */}
+      <div className="flex items-center gap-2">
+        <button 
+          onClick={() => setIsAdminView(!isAdminView)} 
+          className="text-xs font-bold border border-ink-200 px-3 py-1.5 rounded-xl hover:bg-ink-50 cursor-pointer"
+        >
+          {isAdminView ? 'Widok Pacjenta' : '🔒 Panel Administratora'}
+        </button>
+        <button onClick={() => setLang(lang === 'pl' ? 'en' : 'pl')} className="...">
+          {lang === 'pl' ? '🇬🇧 EN' : '🇵🇱 PL'}
+        </button>
+      </div>
+
+
+      {/* W sekcji nagłówka App.tsx dodaj przycisk */}
+      <div className="flex items-center gap-2">
+        <button 
+          onClick={() => setIsAdminView(!isAdminView)} 
+          className="text-xs font-bold border border-ink-200 px-3 py-1.5 rounded-xl hover:bg-ink-50 cursor-pointer"
+        >
+          {isAdminView ? 'Widok Pacjenta' : '🔒 Panel Administratora'}
+        </button>
+        <button onClick={() => setLang(lang === 'pl' ? 'en' : 'pl')} className="...">
+          {lang === 'pl' ? '🇬🇧 EN' : '🇵🇱 PL'}
+        </button>
+      </div>
+
+      {isAdminView ? (
+        session ? (
+          <AdminDashboard 
+            session={session} 
+            handleLogout={handleLogout} 
+            facilities={facilities} 
+            fetchFacilities={fetchFacilities} 
+            showToast={(msg) => alert(msg)} 
+          />
+        ) : (
+          <div className="mt-10 p-6 bg-white rounded-3xl border border-ink-100 max-w-md mx-auto shadow-card">
+            <h2 className="text-lg font-bold mb-4">Logowanie do Panelu Administratora</h2>
+            <form onSubmit={handleAdminLogin} className="space-y-4">
+              <input 
+                type="email" 
+                placeholder="E-mail" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+                className="w-full rounded-xl border border-ink-200 px-4 py-2.5 text-sm"
+              />
+              <input 
+                type="password" 
+                placeholder="Hasło" 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)} 
+                className="w-full rounded-xl border border-ink-200 px-4 py-2.5 text-sm"
+              />
+              <button type="submit" className="w-full bg-ink-900 text-white py-2.5 rounded-xl text-sm font-bold">
+                Zaloguj się
+              </button>
+            </form>
+          </div>
+        )
+      ) : (
+        /* Tutaj znajduje się Twój dotychczasowy widok pacjenta (formularz, wyniki AI, placówki) */
+        <>
+          {/* ... formularz triażu, wyniki, placówki ... */}
+        </>
+      )}
+          
+          {/* Wielojęzyczny Header */}
+          <header className="animate-fade-up">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sage-400 to-teal-500 text-white">
                 <Stethoscope className="h-6 w-6" strokeWidth={2.2} />
               </div>
