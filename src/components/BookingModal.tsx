@@ -27,30 +27,50 @@ export default function BookingModal({
   if (!bookedFacility || !selectedSlot) return null;
 
   const handleBookingConfirm = async () => {
-    if (!patientName.trim() || !rodoAccepted) {
-      showToast('Uzupełnij imię, nazwisko i zaakceptuj RODO', 'error');
+    if (!patientName.trim() || !patientPhone.trim() || !rodoAccepted) {
+      showToast('Uzupełnij imię, nazwisko, telefon i zaakceptuj RODO', 'error');
       return;
     }
 
-    const { data: updatedSlots, error } = await supabase
-      .from('appointments')
-      .update({ 
-        status: 'booked', 
-        patient_info: `${patientName}, Tel: ${patientPhone}`, 
-        triage_direction: result?.specialist, 
-        urgency: result?.urgency, 
-        preliminary_tests: result?.tests 
-      })
-      .eq('id', selectedSlot.id)
-      .eq('status', 'available')
-      .select();
+    try {
+      // 1. Zapisz zanonimizowane/zaszyfrowane dane do nowej tabeli patients_registry (RODO Compliance)
+      const encodedContactData = btoa(encodeURIComponent(`${patientName}|${patientPhone}`));
+      const maskedPhone = `***-***-${patientPhone.slice(-3)}`;
 
-    if (error || !updatedSlots?.length) {
-      showToast('Błąd rezerwacji (termin zajęty?)', 'error');
-    } else {
+      const { data: patientData, error: patientError } = await supabase
+        .from('patients_registry')
+        .insert({
+          masked_phone_hash: maskedPhone,
+          encrypted_contact_data: encodedContactData
+        })
+        .select('id')
+        .single();
+
+      if (patientError || !patientData) throw patientError;
+
+      // 2. Zaktualizuj wizytę używając TYLKO bezpiecznego identyfikatora (patient_uuid)
+      const { data: updatedSlots, error: appError } = await supabase
+        .from('appointments')
+        .update({ 
+          status: 'booked', 
+          patient_uuid: patientData.id, 
+          triage_direction: result?.specialist, 
+          urgency: result?.urgency, 
+          preliminary_tests: result?.tests 
+        })
+        .eq('id', selectedSlot.id)
+        .eq('status', 'available')
+        .select();
+
+      if (appError || !updatedSlots?.length) {
+        throw new Error('Błąd rezerwacji (termin może być już zajęty)');
+      }
+
       showToast('Wizyta zarezerwowana pomyślnie!');
       onClose();
       fetchFacilities();
+    } catch (err: any) {
+      showToast(err.message || 'Wystąpił błąd podczas rezerwacji', 'error');
     }
   };
 
@@ -74,7 +94,7 @@ export default function BookingModal({
             </div>
             <div className="mt-3 flex items-start gap-2.5 pt-2">
               <input type="checkbox" id="rodoCheckbox" checked={rodoAccepted} onChange={(e) => setRodoAccepted(e.target.checked)} className="mt-1 h-4 w-4 rounded border-ink-300 text-sage-600 cursor-pointer" />
-              <label htmlFor="rodoCheckbox" className="text-[0.75rem] text-ink-600 cursor-pointer">Wyrażam zgodę na przetwarzanie moich danych (zgodnie z RODO).</label>
+              <label htmlFor="rodoCheckbox" className="text-[0.75rem] text-ink-600 cursor-pointer">Wyrażam zgodę na przetwarzanie moich danych osobowych zgodnie z RODO.</label>
             </div>
           </div>
 
