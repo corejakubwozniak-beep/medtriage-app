@@ -6,8 +6,11 @@ import {
 } from 'lucide-react';
 import { Language, translations } from './i18n';
 import { analyzeSymptomsWithGemini } from './gemini';
-import { AnalysisResult, Facility } from './types';
+import { AnalysisResult } from './types';
 import BookingModal from './components/BookingModal';
+import { useEffect } from 'react';
+import { supabase } from './supabase';
+import { Facility } from './types';
 
 const URGENCY_STYLES: Record<string, string> = {
   Planowy: 'bg-sage-100 text-sage-700 border-sage-200',
@@ -27,7 +30,21 @@ function App() {
   const [bookedFacility, setBookedFacility] = useState<Facility | null>(null);
   const [lang, setLang] = useState<Language>('pl');
   const t = translations[lang];
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<any>(null);
 
+const fetchFacilities = async () => {
+  const { data, error } = await supabase
+    .from('facilities')
+    .select('*, appointments(*)'); // Pobiera placówki wraz z ich wolnymi terminami
+  if (!error && data) {
+    setFacilities(data);
+  }
+};
+
+useEffect(() => {
+  fetchFacilities();
+}, []);
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!symptoms.trim() || loading) return;
@@ -123,6 +140,39 @@ function App() {
                 <button onClick={() => setBookedFacility(fac)} className="text-sm font-bold bg-sage-500 text-white px-4 py-2 rounded-xl">Zarezerwuj ({fac.earliestSlot})</button>
               </div>
             ))}
+          </section>
+        )}
+
+        {/* Lista dostępnych placówek z bazy */}
+        {result && !loading && (
+          <section className="mt-7 animate-fade-up">
+            <h2 className="text-base font-semibold text-ink-900 mb-4 flex items-center gap-2">
+              <CalendarClock className="h-5 w-5 text-teal-600"/> Dostępne placówki i wolne terminy
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {facilities.map(fac => (
+                <div key={fac.id} className="border border-ink-100 rounded-3xl p-5 bg-white shadow-card">
+                  <h3 className="font-bold text-ink-900">{fac.name}</h3>
+                  <p className="text-xs text-ink-500 mb-3">{fac.address}</p>
+                  
+                  {fac.appointments && fac.appointments.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {fac.appointments.map(slot => (
+                        <button 
+                          key={slot.id} 
+                          onClick={() => { setSelectedSlot(slot); setBookedFacility(fac); }}
+                          className="text-xs font-bold bg-sage-50 text-sage-700 border border-sage-200 px-3 py-2 rounded-xl hover:bg-sage-600 hover:text-white cursor-pointer"
+                        >
+                          📅 {slot.date} godz. {slot.time.slice(0, 5)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-ink-400 italic">Brak wolnych terminów online</p>
+                  )}
+                </div>
+              ))}
+            </div>
           </section>
         )}
 
