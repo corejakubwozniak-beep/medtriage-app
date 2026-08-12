@@ -1,234 +1,145 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
+import {
+  Stethoscope, Activity, ClipboardList, ArrowRight, Compass,
+  UserRound, FlaskConical, ShieldCheck, Info, ChevronRight,
+  Building2, CalendarClock, Star, MapPin, Zap
+} from 'lucide-react';
+import { Language, translations } from './i18n';
 import { analyzeSymptomsWithGemini } from './gemini';
-import { supabase } from './supabase';
-import { AnalysisResult, Facility, HistoryItem } from './types';
-import AdminDashboard from './components/AdminDashboard';
-import TriageForm from './components/TriageForm';
+import { AnalysisResult, Facility } from './types';
 import BookingModal from './components/BookingModal';
-import { Stethoscope, Building2, Info } from 'lucide-react';
 
-let refreshPromise: Promise<any> | null = null;
-async function lockedRefresh() {
-  if (refreshPromise) return refreshPromise;
-  refreshPromise = supabase.auth.refreshSession().finally(() => { refreshPromise = null; });
-  return refreshPromise;
-}
+const URGENCY_STYLES: Record<string, string> = {
+  Planowy: 'bg-sage-100 text-sage-700 border-sage-200',
+  Standardowy: 'bg-teal-50 text-teal-700 border-teal-200',
+  Pilny: 'bg-sand-100 text-sand-500 border-sand-200',
+};
 
-export default function App() {
-  // === NAPRAWA: Przywrócony stan dla numeru telefonu ===
-  const [patientPhone, setPatientPhone] = useState(''); 
-  
-  const [session, setSession] = useState<any>(null);
-  const [isAdminView, setIsAdminView] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+// Placeholder dla placówek - docelowo pobierany z Supabase (możesz wpiąć logikę fetchFacilities jak miałeś wcześniej)
+const MOCK_FACILITIES: Facility[] = [
+  { id: 1, name: 'Klinika Centralna', address: 'Warszawa', earliestSlot: 'Dziś, 16:30', isFastest: true, doctor: 'dr Kowalski', rating: 4.9 }
+];
+
+function App() {
   const [symptoms, setSymptoms] = useState('');
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [facilities, setFacilities] = useState<Facility[]>([]);
   const [bookedFacility, setBookedFacility] = useState<Facility | null>(null);
-  const [selectedSlot, setSelectedSlot] = useState<any | null>(null);
-  const [imageFile, setImageFile] = useState<{ base64: string; mimeType: string } | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [history, setHistory] = useState<HistoryItem[]>(() => {
-    const saved = localStorage.getItem('medtriage_history');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
-  };
-
-  const fetchFacilities = async () => {
-    const { data } = await supabase.from('facilities').select(`*, appointments (id, date, time, status)`);
-    if (data) {
-      setFacilities(data.map((item: any) => ({
-        id: item.id, name: item.name, address: item.address, earliestSlot: item.earliest_slot, isFastest: item.is_fastest, doctor: item.doctor, rating: Number(item.rating), direction: item.direction,
-        appointments: item.appointments?.filter((app: any) => app.status === 'available') || [],
-      })));
-    }
-  };
-
-  useEffect(() => { fetchFacilities(); }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-    supabase.auth.onAuthStateChange((_, session) => {
-      if (isMounted) setSession(session?.user?.user_metadata?.role === 'admin' ? session : null);
-    });
-    lockedRefresh().then(({ data: { session } }) => {
-      if (isMounted) setSession(session?.user?.user_metadata?.role === 'admin' ? session : null);
-    }).catch(() => { if (isMounted) setSession(null); });
-    return () => { isMounted = false; };
-  }, []);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error || data.session?.user?.user_metadata?.role !== 'admin') {
-      await supabase.auth.signOut();
-      setSession(null);
-      showToast('Błąd logowania lub brak uprawnień administratora.', 'error');
-    } else {
-      setSession(data.session);
-      setEmail(''); setPassword('');
-      showToast('Zalogowano pomyślnie!');
-    }
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-    showToast('Wylogowano pomyślnie.');
-  };
+  const [lang, setLang] = useState<Language>('pl');
+  const t = translations[lang];
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if ((!symptoms.trim() && !imageFile) || loading) return;
-    setLoading(true); setProgress(10); setResult(null);
-    const interval = setInterval(() => setProgress((prev) => (prev >= 90 ? 90 : prev + 5)), 150);
+    if (!symptoms.trim() || loading) return;
+    
+    setLoading(true);
+    setResult(null);
 
-    try {
-      const rawAiResult = await analyzeSymptomsWithGemini(symptoms, imageFile);
-      if (rawAiResult.error || rawAiResult.direction === 'Błąd analizy') throw new Error(rawAiResult.explanation || 'Błąd AI.');
-
-      const mappedResult: AnalysisResult = {
-        direction: rawAiResult.direction || 'Diagnostyka ogólna',
-        directionNote: rawAiResult.explanation || 'Opis analizy.',
-        specialist: rawAiResult.specialist || 'Lekarz Rodzinny',
-        specialistNote: `Konsultacja: ${rawAiResult.specialist || 'Lekarz Rodzinny'}.`,
-        tests: rawAiResult.tests || rawAiResult.recommendedTests || ['Morfologia krwi'],
-        urgency: (['Planowy', 'Standardowy', 'Pilny'].includes(rawAiResult.priority) ? rawAiResult.priority : 'Standardowy') as AnalysisResult['urgency'],
-      };
-
-      setProgress(100); setResult(mappedResult);
-
-      const phoneToUse = patientPhone.trim() || 'anonim';
-
-      const { data: insertedData } = await supabase.from('triage_history').insert([{
-        patient_phone: phoneToUse, // <--- TUTAJ ZMIANA: używamy zmiennej phoneToUse
-        symptoms: symptoms.trim() || 'Zdjęcie', 
-        direction: mappedResult.direction, 
-        specialist: mappedResult.specialist, 
-        urgency: mappedResult.urgency, 
-        tests: mappedResult.tests, 
-        has_image: !!imageFile
-      }]).select().single();
-
-      if (insertedData) {
-        setHistory((prev) => {
-          // 1. Tworzymy nową tablicę z dodanym aktualnym wynikiem
-          const newHistory = [{ 
-            id: insertedData.id.toString(), 
-            date: new Date(insertedData.created_at).toLocaleString(), 
-            symptoms: insertedData.symptoms, 
-            hasImage: insertedData.has_image, 
-            result: mappedResult 
-          }, ...prev].slice(0, 10);
-          
-          // 2. Od razu zapisujemy zaktualizowaną historię trwale do pamięci przeglądarki
-          localStorage.setItem('medtriage_history', JSON.stringify(newHistory));
-          
-          return newHistory;
-        });
-      }
-      showToast('Analiza zakończona pomyślnie!');
-    } catch (error: any) {
-      showToast(error.message || 'Wystąpił błąd.', 'error');
-    } finally {
-      clearInterval(interval); setLoading(false);
-    }
+    // Integracja z PRAWDZIWYM modelem Google Gemini
+    const aiResponse = await analyzeSymptomsWithGemini(symptoms, null);
+    
+    setResult({
+      direction: aiResponse.direction,
+      directionNote: aiResponse.explanation,
+      specialist: aiResponse.specialist,
+      specialistNote: '',
+      tests: aiResponse.tests,
+      urgency: aiResponse.priority as any
+    });
+    
+    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen print:bg-white print:py-0">
-      <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14 print:px-0 print:py-0 print:max-w-none">
+    <div className="min-h-screen">
+      <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14">
         
-        <button onClick={() => setIsAdminView(!isAdminView)} className="text-xs text-ink-400 hover:text-sage-600 transition-colors mt-2 cursor-pointer font-medium">
-          {isAdminView ? '← Powrót do widoku pacjenta' : '🔒 Panel dla placówek medycznych'}
-        </button>
-
-        <header className="animate-fade-up print:hidden">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sage-400 to-teal-500 text-white shadow-soft">
-              <Stethoscope className="h-6 w-6" strokeWidth={2.2} />
+        {/* Wielojęzyczny Header */}
+        <header className="animate-fade-up">
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sage-400 to-teal-500 text-white">
+                <Stethoscope className="h-6 w-6" strokeWidth={2.2} />
+              </div>
+              <h1 className="text-2xl font-bold tracking-tight text-ink-900">{t.title}</h1>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-[1.7rem]">MedTriage</h1>
-              <p className="text-sm font-medium text-ink-500">Inteligentny asystent triażowy AI</p>
-            </div>
+            <button onClick={() => setLang(lang === 'pl' ? 'en' : 'pl')} className="text-xs font-bold border border-ink-200 px-3 py-1.5 rounded-xl hover:bg-ink-50">
+              {lang === 'pl' ? '🇬🇧 EN' : '🇵🇱 PL'}
+            </button>
           </div>
-          <p className="mt-5 max-w-2xl text-[0.95rem] leading-relaxed text-ink-600 text-balance">
-            Wpisz swoje objawy lub załącz zdjęcie wyników badań / zmiany skórnej. Asystent zasugeruje kierunek diagnostyczny, rekomendowanego specjalistę oraz badania wstępne.
-          </p>
+          <p className="max-w-2xl text-[0.95rem] leading-relaxed text-ink-600">{t.description}</p>
         </header>
 
-        <div className="mt-6 flex items-start gap-3 rounded-2xl border border-sand-200 bg-sand-50/70 px-4 py-3.5 animate-fade-up print:hidden">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-sand-500" />
-          <p className="text-[0.82rem] leading-relaxed text-ink-700">Wynik ma charakter informacyjny. W nagłych wypadkach zadzwoń pod numer 112 lub udaj się na SOR.</p>
-        </div>
+        {/* Triage Form */}
+        <section className="mt-7 animate-fade-up">
+          <form onSubmit={handleSubmit} className="rounded-3xl border border-ink-100 bg-white/80 p-6 shadow-card">
+            <div className="flex items-center gap-2.5 mb-4">
+              <ClipboardList className="h-5 w-5 text-sage-500" />
+              <h2 className="text-base font-semibold text-ink-900">Opisz swoje objawy</h2>
+            </div>
+            <textarea
+              value={symptoms}
+              onChange={(e) => setSymptoms(e.target.value)}
+              rows={4}
+              placeholder={t.placeholder}
+              className="w-full resize-none rounded-2xl border border-ink-200 bg-sage-50/40 px-4 py-3.5 text-[0.95rem] text-ink-900 focus:ring-4 focus:ring-sage-400/15 outline-none"
+            />
+            <button type="submit" disabled={!symptoms.trim() || loading} className="mt-4 w-full flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-6 py-3.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">
+              {loading ? <Activity className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+              {loading ? t.analyzing : t.analyzeBtn}
+            </button>
+          </form>
+        </section>
 
-        {isAdminView && (!session ? (
-          <section className="mt-7 animate-fade-up max-w-sm mx-auto print:hidden">
-            <form onSubmit={handleLogin} className="rounded-3xl border border-ink-100 bg-white p-6 shadow-card sm:p-7">
-              <div className="flex flex-col items-center mb-6">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sage-100 text-sage-600 mb-3"><Building2 className="h-6 w-6" /></div>
-                <h2 className="text-lg font-bold text-ink-900">Logowanie dla placówek</h2>
-              </div>
-              <div className="space-y-4">
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Adres e-mail" className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm" required />
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Hasło" className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm" required />
-                <button type="submit" className="w-full rounded-2xl bg-ink-900 px-5 py-3 text-sm font-semibold text-white shadow-soft cursor-pointer">Zaloguj się</button>
-              </div>
-            </form>
+        {/* AI Result */}
+        {result && !loading && (
+          <section className="mt-7 animate-fade-up">
+             <div className="overflow-hidden rounded-3xl border border-ink-100 bg-white shadow-card">
+                <div className="flex items-center justify-between bg-gradient-to-r from-sage-50 to-teal-50 px-6 py-5">
+                  <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-sage-600" /><h3 className="font-bold text-ink-900">Wynik AI</h3></div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${URGENCY_STYLES[result.urgency]}`}>{result.urgency}</span>
+                </div>
+                <div className="p-6">
+                  <p className="text-sm font-bold text-ink-500">{t.specialist}</p>
+                  <p className="text-xl font-bold text-ink-900 mb-4">{result.specialist}</p>
+                  <p className="text-sm font-bold text-ink-500">{t.direction}</p>
+                  <p className="text-ink-700 text-sm mb-4">{result.directionNote}</p>
+                  <p className="text-sm font-bold text-ink-500 mb-2">{t.tests}</p>
+                  <ul className="space-y-2">
+                    {result.tests.map((test, i) => <li key={i} className="text-sm flex items-center gap-2"><ChevronRight className="h-4 w-4 text-sage-500"/> {test}</li>)}
+                  </ul>
+                </div>
+             </div>
           </section>
-        ) : (
-          <AdminDashboard session={session} handleLogout={handleLogout} facilities={facilities} fetchFacilities={fetchFacilities} showToast={showToast} />
-        ))}
-
-        {!isAdminView && (
-          <TriageForm 
-            patientPhone={patientPhone} setPatientPhone={setPatientPhone}
-            symptoms={symptoms} setSymptoms={setSymptoms}
-            imageFile={imageFile} imagePreview={imagePreview}
-            handleImageChange={(e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-
-              // Zabezpieczenie przed zbyt dużym plikiem (max 5 MB)
-              if (file.size > 5 * 1024 * 1024) {
-                showToast('Zdjęcie jest za duże! Maksymalny rozmiar to 5 MB.', 'error');
-                return;
-              }
-
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                setImageFile({ base64: (reader.result as string).split(',')[1], mimeType: file.type });
-                setImagePreview(reader.result as string);
-              };
-              reader.readAsDataURL(file);
-            }}
-            removeImage={() => { setImageFile(null); setImagePreview(null); }}
-            handleSubmit={handleSubmit} loading={loading} progress={progress} result={result}
-            facilities={facilities} setSelectedSlot={setSelectedSlot} setBookedFacility={setBookedFacility}
-            history={history} loadFromHistory={(item) => { setSymptoms(item.symptoms); setResult(item.result); setImageFile(null); setImagePreview(null); }}
-            clearHistory={() => { setHistory([]); localStorage.removeItem('medtriage_history'); showToast('Wyczyszczono historię.'); }}
-          />
         )}
 
-        <BookingModal bookedFacility={bookedFacility} selectedSlot={selectedSlot} onClose={() => { setBookedFacility(null); setSelectedSlot(null); }} result={result} showToast={showToast} fetchFacilities={fetchFacilities} />
+        {/* MOCK Facilities List (dla pacjenta do rezerwacji) */}
+        {result && !loading && (
+          <section className="mt-7 animate-fade-up">
+            <h2 className="text-base font-semibold text-ink-900 mb-4 flex items-center gap-2"><CalendarClock className="h-5 w-5 text-teal-600"/> Dostępne placówki</h2>
+            {MOCK_FACILITIES.map(fac => (
+              <div key={fac.id} className="border border-ink-100 rounded-2xl p-5 bg-white shadow-sm flex justify-between items-center">
+                <div><h3 className="font-bold">{fac.name}</h3><p className="text-xs text-ink-500">{fac.address}</p></div>
+                <button onClick={() => setBookedFacility(fac)} className="text-sm font-bold bg-sage-500 text-white px-4 py-2 rounded-xl">Zarezerwuj ({fac.earliestSlot})</button>
+              </div>
+            ))}
+          </section>
+        )}
 
-        {toast && (
-          <div className="fixed bottom-6 right-6 z-50 animate-fade-up">
-            <div className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 shadow-card border backdrop-blur-md ${toast.type === 'success' ? 'bg-sage-900/90 text-white' : 'bg-red-900/90 text-white'}`}>
-              <span>{toast.type === 'success' ? '✅' : '⚠️'}</span><p className="text-xs font-semibold">{toast.message}</p>
-            </div>
-          </div>
+        {/* Modal Rezerwacji z bezpieczną architekturą RODO */}
+        {bookedFacility && (
+          <BookingModal 
+            bookedFacility={bookedFacility} 
+            selectedSlot={{ id: 1 }} // Symulacja klikniętego slotu z kalendarza
+            onClose={() => setBookedFacility(null)} 
+            result={result}
+            showToast={() => {}}
+            fetchFacilities={() => {}}
+          />
         )}
       </div>
     </div>
   );
 }
+
+export default App;
