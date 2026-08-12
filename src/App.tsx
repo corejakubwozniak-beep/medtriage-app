@@ -18,10 +18,6 @@ const URGENCY_STYLES: Record<string, string> = {
   Pilny: 'bg-sand-100 text-sand-500 border-sand-200',
 };
 
-// Placeholder dla placówek - docelowo pobierany z Supabase (możesz wpiąć logikę fetchFacilities jak miałeś wcześniej)
-const MOCK_FACILITIES: Facility[] = [
-  { id: 1, name: 'Klinika Centralna', address: 'Warszawa', earliestSlot: 'Dziś, 16:30', isFastest: true, doctor: 'dr Kowalski', rating: 4.9 }
-];
 
 function App() {
   const [symptoms, setSymptoms] = useState('');
@@ -130,18 +126,6 @@ useEffect(() => {
           </section>
         )}
 
-        {/* MOCK Facilities List (dla pacjenta do rezerwacji) */}
-        {result && !loading && (
-          <section className="mt-7 animate-fade-up">
-            <h2 className="text-base font-semibold text-ink-900 mb-4 flex items-center gap-2"><CalendarClock className="h-5 w-5 text-teal-600"/> Dostępne placówki</h2>
-            {MOCK_FACILITIES.map(fac => (
-              <div key={fac.id} className="border border-ink-100 rounded-2xl p-5 bg-white shadow-sm flex justify-between items-center">
-                <div><h3 className="font-bold">{fac.name}</h3><p className="text-xs text-ink-500">{fac.address}</p></div>
-                <button onClick={() => setBookedFacility(fac)} className="text-sm font-bold bg-sage-500 text-white px-4 py-2 rounded-xl">Zarezerwuj ({fac.earliestSlot})</button>
-              </div>
-            ))}
-          </section>
-        )}
 
         {/* Lista dostępnych placówek z bazy */}
         {result && !loading && (
@@ -177,11 +161,11 @@ useEffect(() => {
         )}
 
         {/* Modal Rezerwacji z bezpieczną architekturą RODO */}
-        {bookedFacility && (
+       {bookedFacility && selectedSlot && (
           <BookingModal 
             bookedFacility={bookedFacility} 
-            selectedSlot={{ id: 1 }} // Symulacja klikniętego slotu z kalendarza
-            onClose={() => setBookedFacility(null)} 
+            selectedSlot={selectedSlot} 
+            onClose={() => { setBookedFacility(null); setSelectedSlot(null); }}
             result={result}
             showToast={() => {}}
             fetchFacilities={() => {}}
