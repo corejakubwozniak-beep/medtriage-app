@@ -307,6 +307,24 @@ function App() {
             fetchFacilities={fetchFacilities}
           />
         )}
+
+        {/* --- DODANY KOMPONENT DISCLAIMERA --- */}
+        {!isAdminView && (
+          <footer className="mt-12 animate-fade-up border-t border-ink-100 pt-8 print:hidden">
+            <div className="rounded-2xl border border-sand-200 bg-sand-50/50 p-5 shadow-sm">
+              <div className="flex items-start gap-3">
+                <Info className="mt-0.5 h-5 w-5 shrink-0 text-sand-500" />
+                <div className="text-[0.8rem] text-ink-600 leading-relaxed">
+                  <strong className="block text-ink-900 mb-1 text-sm">Ważna informacja prawna i medyczna</strong>
+                  <strong>MedTriage</strong> jest narzędziem pomocniczym służącym do wstępnej organizacji wizyt i usprawnienia procesu rejestracji w placówkach medycznych. Aplikacja oparta na sztucznej inteligencji <strong>nie stawia diagnoz medycznych</strong>, nie zastępuje profesjonalnej porady lekarskiej, konsultacji ze specjalistą ani fizykalnego badania lekarskiego. 
+                  <br /><br />
+                  W przypadku nagłego pogorszenia stanu zdrowia, silnego bólu lub wystąpienia objawów bezpośredniego zagrożenia życia, należy zignorować sugestie systemu i niezwłocznie skontaktować się z numerem alarmowym <strong>112</strong> lub udać się na najbliższy Szpitalny Oddział Ratunkowy (SOR).
+                </div>
+              </div>
+            </div>
+          </footer>
+        )}
+        {/* ------------------------------------ */}
       </div>
     </div>
   );
