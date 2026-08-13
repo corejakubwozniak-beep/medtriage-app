@@ -27,6 +27,8 @@ export default function BookingModal({
   if (!bookedFacility || !selectedSlot) return null;
 
   const handleBookingConfirm = async () => {
+    const phoneRegex = /^(\+48)?\s?\d{3}\s?\d{3}\s?\d{3}$/;
+    
     if (!patientName.trim() || !patientPhone.trim() || !rodoAccepted) {
       showToast('Uzupełnij imię, nazwisko, telefon i zaakceptuj RODO', 'error');
       return;
