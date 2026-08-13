@@ -83,8 +83,14 @@ export default function MfaManager({ onSuccess }: MfaManagerProps) {
       </p>
 
       {isEnrolling && qrCode && (
-        <div className="mb-6 rounded-2xl bg-white p-4 shadow-sm border border-ink-100">
-          <QRCodeSVG value={qrCode} size={180} />
+        <div className="mb-6 rounded-2xl bg-white p-4 shadow-sm border border-ink-100 flex flex-col items-center">
+          {qrCode.startsWith('data:image') ? (
+            // Jeśli Supabase zwraca gotowy obrazek/SVG jako Data URL
+            <img src={qrCode} alt="QR Code MFA" className="w-[180px] h-[180px]" />
+          ) : (
+            // Jeśli zwraca standardowy tekst konfiguracyjny OTPAuth
+            <QRCodeSVG value={qrCode} size={180} level="L" />
+          )}
         </div>
       )}
 
