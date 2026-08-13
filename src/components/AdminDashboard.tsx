@@ -40,10 +40,10 @@ export default function AdminDashboard({
       if (facError || !facilityDataArray || facilityDataArray.length === 0) return [];
       const facilityData = facilityDataArray[0];
 
-      // Zwróć uwagę na Join z tabelą patients_registry
+      // Bezpieczne pobranie rezerwacji bez sztywnego Join SQL
       const { data, error } = await supabase
         .from('appointments')
-        .select(`*, facilities(name, address), patients_registry(encrypted_contact_data)`)
+        .select(`*, facilities(name, address)`)
         .eq('facility_id', facilityData.id)
         .eq('status', 'booked')
         .order('date', { ascending: true });
