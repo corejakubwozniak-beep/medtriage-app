@@ -172,24 +172,24 @@ export default function TriageForm({
       {!loading && result && (
         <>
           {result.urgency === 'Pilny' ? (
-            <section className="mt-7 animate-fade-in print:hidden">
-              <div className="rounded-3xl border-2 border-red-500 bg-red-50 p-8 text-center shadow-lg">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600 mb-4">
-                  <ShieldCheck className="h-8 w-8" />
-                </div>
-                <h2 className="text-2xl font-bold text-red-900 mb-2">WYMAGANA NATYCHMIASTOWA POMOC</h2>
-                <p className="text-red-800 font-medium mb-6">
-                  Twoje objawy wskazują na stan zagrożenia życia. <strong>Nie rezerwuj wizyty w przychodni.</strong>
-                </p>
-                <a 
-                  href="tel:112" 
-                  className="inline-block bg-red-600 text-white font-bold py-4 px-8 rounded-2xl text-xl hover:bg-red-700 transition-all shadow-md"
-                >
-                  ZADZWOŃ POD 112
-                </a>
-                <p className="mt-4 text-sm text-red-700 underline">Udaj się na najbliższy Szpitalny Oddział Ratunkowy (SOR)</p>
-              </div>
-            </section>
+      <section className="mt-7 animate-fade-in print:hidden">
+        <div className="rounded-3xl border-2 border-red-500 bg-red-50 p-8 text-center shadow-lg">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600 mb-4">
+            <ShieldCheck className="h-8 w-8" />
+          </div>
+          <h2 className="text-2xl font-bold text-red-900 mb-2">WYMAGANA NATYCHMIASTOWA POMOC</h2>
+          <p className="text-red-800 font-medium mb-6">
+            Twoje objawy wskazują na stan zagrożenia życia. <strong>Nie rezerwuj wizyty w przychodni.</strong>
+          </p>
+          <a 
+            href="tel:112" 
+            className="inline-block bg-red-600 text-white font-bold py-4 px-8 rounded-2xl text-xl hover:bg-red-700 transition-all shadow-md"
+          >
+            ZADZWOŃ POD 112
+          </a>
+          <p className="mt-4 text-sm text-red-700 underline">Udaj się na najbliższy Szpitalny Oddział Ratunkowy (SOR)</p>
+        </div>
+      </section>
           ) : (
             <section className="mt-7 animate-fade-up print:hidden">
               <div className="mb-4 flex items-center gap-2.5">
