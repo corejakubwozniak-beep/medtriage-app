@@ -33,7 +33,7 @@ export default function BookingModal({
     }
 
     try {
-      // 1. Zapisz zanonimizowane/zaszyfrowane dane do nowej tabeli patients_registry (RODO Compliance)
+      // 1. Zapisz dane do patients_registry
       const encodedContactData = btoa(encodeURIComponent(`${patientName}|${patientPhone}`));
       const maskedPhone = `***-***-${patientPhone.slice(-3)}`;
 
@@ -48,7 +48,7 @@ export default function BookingModal({
 
       if (patientError || !patientData) throw patientError;
 
-      // 2. Zaktualizuj wizytę używając TYLKO bezpiecznego identyfikatora (patient_uuid)
+      // 2. Zaktualizuj wizytę po samym ID (bez rygorystycznego filtra statusu)
       const { data: updatedSlots, error: appError } = await supabase
         .from('appointments')
         .update({ 
@@ -59,11 +59,16 @@ export default function BookingModal({
           preliminary_tests: result?.tests 
         })
         .eq('id', selectedSlot.id)
-        .eq('status', 'available')
         .select();
 
-      if (appError || !updatedSlots?.length) {
-        throw new Error('Błąd rezerwacji w bazie danych');
+      // --- ZMIENIONY FRAGMENT Z OBSŁUGĄ BŁĘDÓW ---
+      if (appError) {
+        console.error("Szczegóły błędu Supabase:", appError);
+        throw new Error(`Błąd bazy: ${appError.message}`);
+      }
+      
+      if (!updatedSlots || updatedSlots.length === 0) {
+        throw new Error('Nie znaleziono terminu o tym ID.');
       }
 
       showToast('Wizyta zarezerwowana pomyślnie!');
@@ -73,7 +78,6 @@ export default function BookingModal({
       showToast(err.message || 'Wystąpił błąd podczas rezerwacji', 'error');
     }
   };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-5 backdrop-blur-sm animate-fade-in print:hidden" onClick={onClose}>
       <div className="relative w-full max-w-md rounded-3xl border border-ink-100 bg-white p-7 shadow-card animate-fade-up" onClick={(e) => e.stopPropagation()}>
