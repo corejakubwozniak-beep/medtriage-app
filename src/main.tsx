@@ -15,7 +15,7 @@ import './index.css';
 
 // 1. Inicjalizacja Sentry (Observability - łapanie błędów z produkcji)
 Sentry.init({
-  dsn: "", // Otrzymasz go po założeniu darmowego konta na sentry.io
+  dsn: "", 
   integrations: [
     Sentry.browserTracingIntegration(),
     Sentry.replayIntegration(),
