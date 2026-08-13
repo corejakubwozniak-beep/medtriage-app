@@ -5,17 +5,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App.tsx';
 import './index.css';
 
-// 1. Inicjalizacja Sentry (Observability - łapanie błędów z produkcji)
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
-import * as Sentry from "@sentry/react";
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import App from './App.tsx';
-import './index.css';
-
-// 1. Inicjalizacja Sentry (Observability - łapanie błędów z produkcji)
+// 1. Inicjalizacja Sentry (Zabezpieczona przed błędem nieustawionego DSN)
 Sentry.init({
-  dsn: "", 
+  dsn: "", // Pusty string wyłącza Sentry i usuwa błędy konsoli dopóki nie dodasz prawdziwego klucza
   integrations: [
     Sentry.browserTracingIntegration(),
     Sentry.replayIntegration(),
@@ -25,30 +17,12 @@ Sentry.init({
   replaysOnErrorSampleRate: 1.0,
 });
 
-// 2. Inicjalizacja TanStack Query (Inteligentne zarządzanie zapytaniami)
+// 2. Inicjalizacja TanStack Query (Jednoznaczna deklaracja)
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1, // W razie błędu sieci, system spróbuje ponowić zapytanie 1 raz
-      refetchOnWindowFocus: true, // Odświeża dane, gdy administrator wraca na kartę przeglądarki
-    },
-  },
-});
-
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </StrictMode>
-);
-
-// 2. Inicjalizacja TanStack Query (Inteligentne zarządzanie zapytaniami)
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1, // W razie błędu sieci, system spróbuje ponowić zapytanie 1 raz
-      refetchOnWindowFocus: true, // Odświeża dane, gdy administrator wraca na kartę przeglądarki
+      retry: 1,
+      refetchOnWindowFocus: true,
     },
   },
 });
