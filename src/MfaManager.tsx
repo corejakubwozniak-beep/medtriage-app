@@ -27,20 +27,29 @@ export default function MfaManager({ onSuccess }: MfaManagerProps) {
     return;
   }
 
-  const { data: factors } = await supabase.auth.mfa.listFactors();
+  // Pobieramy listę istniejących czynników MFA
+  const { data: factors, error: factorsError } = await supabase.auth.mfa.listFactors();
+  if (factorsError) return;
   const totpFactor = factors?.totp[0];
 
   if (totpFactor) {
-    setFactorId(totpFactor.id);
-    setIsEnrolling(false);
-  } else {
-    setIsEnrolling(true);
-    startEnrollment();
-  }
-};
+      // Jeśli czynnik już istnieje, NIE wywołujemy enroll, tylko pobieramy jego ID do weryfikacji
+      setFactorId(totpFactor.id);
+      setIsEnrolling(false); // Przechodzimy bezpośrednio do wpisania 6-cyfrowego kodu
+    } else {
+      // Jeśli nie ma żadnego czynnika, dopiero wtedy uruchamiamy rejestrację (generowanie QR)
+      setIsEnrolling(true);
+      startEnrollment();
+    }
+  };
 
   const startEnrollment = async () => {
-    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
+    // Używamy unikalnej nazwy z timestampem, aby unikać konfliktu nazw
+    const { data, error } = await supabase.auth.mfa.enroll({ 
+      factorType: 'totp',
+      friendlyName: `MedTriage Admin (${Date.now()})` 
+    });
+    
     if (error) {
       setErrorMsg('Błąd generowania MFA: ' + error.message);
       return;
