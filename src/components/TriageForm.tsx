@@ -1,20 +1,28 @@
 import { type FormEvent } from 'react';
-import { Facility, HistoryItem, AnalysisResult } from '../types';
+import { AnalysisResult, Facility, HistoryItem } from '../types';
 import { URGENCY_STYLES } from '../data';
-import AiReport from './AiReport';
 import {
   ClipboardList,
   ArrowRight,
   Activity,
+  Compass,
+  UserRound,
+  FlaskConical,
+  ShieldCheck,
+  ChevronRight,
   Building2,
   CalendarClock,
   MapPin,
   Upload,
   Trash2,
+  Download,
   Clock,
+  Stethoscope,
 } from 'lucide-react';
 
 interface TriageFormProps {
+  patientPhone: string;
+  setPatientPhone: (val: string) => void;
   symptoms: string;
   setSymptoms: (val: string) => void;
   imageFile: { base64: string; mimeType: string } | null;
@@ -34,6 +42,8 @@ interface TriageFormProps {
 }
 
 export default function TriageForm({
+  patientPhone,
+  setPatientPhone,
   symptoms,
   setSymptoms,
   imageFile,
@@ -55,10 +65,22 @@ export default function TriageForm({
     <>
       <section className="mt-7 animate-fade-up print:hidden" style={{ animationDelay: '0.1s' }}>
         <form onSubmit={handleSubmit} className="rounded-3xl border border-ink-100 bg-white/80 p-6 shadow-card backdrop-blur-sm sm:p-7">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 mb-4">
             <ClipboardList className="h-5 w-5 text-sage-500" />
             <h2 className="text-base font-semibold text-ink-900">Opisz swoje objawy lub dodaj zdjęcie</h2>
           </div>
+          
+          <div className="mb-4">
+              <label className="block text-xs font-semibold text-ink-700 mb-1">Twój numer telefonu (opcjonalnie, do powiązania historii):</label>
+              <input 
+                  type="tel" 
+                  value={patientPhone} 
+                  onChange={(e) => setPatientPhone(e.target.value)} 
+                  placeholder="np. 123 456 789" 
+                  className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50" 
+              />
+          </div>
+
           <textarea 
             value={symptoms} 
             onChange={(e) => setSymptoms(e.target.value)} 
@@ -93,45 +115,118 @@ export default function TriageForm({
         </form>
       </section>
 
-      {/* Wywołanie nowego komponentu raportu AI */}
-      <AiReport loading={loading} result={result} />
+      {/* Wynik analizy AI */}
+      <section className="mt-7 print:mt-0">
+        {loading && (
+          <div className="flex items-center justify-center gap-3 rounded-3xl border border-ink-100 bg-white/70 py-16 shadow-card animate-fade-in print:hidden">
+            <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-sage-200 border-t-sage-500" />
+            <span className="text-sm font-medium text-ink-500">Przygotowuję sugestię triażową z AI...</span>
+          </div>
+        )}
 
-      {/* Lista dostępnych placówek */}
-      {!loading && result && (
-        <section className="mt-7 animate-fade-up print:hidden">
-          <div className="mb-4 flex items-center gap-2.5">
-            <CalendarClock className="h-5 w-5 text-teal-600" />
-            <h2 className="text-base font-semibold text-ink-900">Dostępne placówki i wolne terminy</h2>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {facilities.map((facility) => (
-              <div key={facility.name} className="flex flex-col rounded-3xl border border-ink-100 bg-white/85 p-5 shadow-card backdrop-blur-sm transition-all duration-200 hover:border-sage-200 hover:shadow-card sm:p-6">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sage-100 text-sage-600"><Building2 className="h-5 w-5" /></div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-[0.95rem] font-bold leading-snug text-ink-900">{facility.name}</h3>
-                    <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-500"><MapPin className="h-3.5 w-3.5 shrink-0" />{facility.address}</p>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <p className="text-xs font-semibold text-ink-500 mb-2 uppercase tracking-wider">Wybierz termin wizyty:</p>
-                  {facility.appointments && facility.appointments.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {facility.appointments.map((slot) => (
-                        <button key={slot.id} onClick={() => { setSelectedSlot(slot); setBookedFacility(facility); }} className="inline-flex items-center gap-1.5 rounded-xl border border-sage-300 bg-sage-50 px-3 py-2 text-xs font-semibold text-sage-700 transition-all hover:bg-sage-600 hover:text-white cursor-pointer">
-                          <span>📅 {slot.date}</span><span className="font-bold">godz. {slot.time.slice(0, 5)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : <p className="text-xs text-ink-400 italic">Brak wolnych terminów online</p>}
-                </div>
+        {!loading && result && (
+          <div className="overflow-hidden rounded-3xl border border-ink-100 bg-white/85 shadow-card backdrop-blur-sm animate-fade-up print:border-none print:shadow-none print:bg-white print:rounded-none">
+            <div className="hidden print:block mb-8 border-b border-ink-100 pb-6">
+              <div className="flex items-center gap-3 mb-4"><Stethoscope className="h-8 w-8 text-sage-600" /><h1 className="text-2xl font-bold text-ink-900">Raport Triażowy pacjenta - MedTriage</h1></div>
+              <p className="text-sm text-ink-600"><strong>Data analizy:</strong> {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-b border-ink-100 bg-gradient-to-r from-sage-50 to-teal-50/60 px-6 py-5 sm:px-7 print:bg-none print:px-0">
+              <div className="flex items-center gap-2.5"><ShieldCheck className="h-5 w-5 text-sage-600 print:text-ink-900" /><h3 className="text-base font-semibold text-ink-900">Wynik analizy triażowej AI</h3></div>
+              <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold print:border-ink-200 print:text-ink-900 ${URGENCY_STYLES[result.urgency]}`}>Priorytet: {result.urgency}</span>
+            </div>
+
+            <div className="grid gap-px bg-ink-100 sm:grid-cols-2 print:grid-cols-2 print:bg-ink-200 print:border-b print:border-ink-200">
+              <div className="bg-white p-6 sm:p-7 print:p-4">
+                <div className="flex items-center gap-2.5 text-sage-600 print:text-ink-500"><Compass className="h-4.5 w-4.5" /><span className="text-[0.72rem] font-semibold uppercase tracking-wider">Sugerowany kierunek</span></div>
+                <p className="mt-2.5 text-xl font-bold text-ink-900">{result.direction}</p>
               </div>
-            ))}
+              <div className="bg-white p-6 sm:p-7 print:p-4">
+                <div className="flex items-center gap-2.5 text-teal-600 print:text-ink-500"><UserRound className="h-4.5 w-4.5" /><span className="text-[0.72rem] font-semibold uppercase tracking-wider">Rekomendowany specjalista</span></div>
+                <p className="mt-2.5 text-xl font-bold text-ink-900">{result.specialist}</p>
+              </div>
+            </div>
+
+            <div className="border-t border-ink-100 bg-white p-6 sm:p-7 print:border-none print:px-0">
+              <div className="flex items-center gap-2.5 text-sand-500 print:text-ink-500"><FlaskConical className="h-4.5 w-4.5" /><span className="text-[0.72rem] font-semibold uppercase tracking-wider">Zalecane badania wstępne</span></div>
+              <ul className="mt-3.5 grid gap-2.5 sm:grid-cols-2 print:grid-cols-1">
+                {result.tests.map((test) => (
+                  <li key={test} className="flex items-center gap-3 rounded-xl border border-ink-100 bg-sage-50/40 px-4 py-3 print:border-none print:bg-transparent print:p-1">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sage-100 text-sage-600 print:hidden"><ChevronRight className="h-3.5 w-3.5" /></span>
+                    <span className="text-sm font-medium text-ink-800">{test}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="border-t border-ink-100 bg-white p-6 sm:px-7 print:hidden flex justify-center">
+              <button onClick={() => window.print()} className="group inline-flex items-center gap-2.5 rounded-2xl bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:bg-ink-800 hover:shadow-card cursor-pointer">
+                <Download className="h-4.5 w-4.5 transition-transform group-hover:-translate-y-0.5" /> Pobierz raport dla lekarza (PDF)
+              </button>
+            </div>
           </div>
-        </section>
+        )}
+      </section>
+
+      {/* Warunkowa sekcja: Alarm SOR/112 lub Zwykła Lista Placówek */}
+      {!loading && result && (
+        <>
+          {result.urgency === 'Pilny' ? (
+            <section className="mt-7 animate-fade-in print:hidden">
+              <div className="rounded-3xl border-2 border-red-500 bg-red-50 p-8 text-center shadow-lg">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600 mb-4">
+                  <ShieldCheck className="h-8 w-8" />
+                </div>
+                <h2 className="text-2xl font-bold text-red-900 mb-2">WYMAGANA NATYCHMIASTOWA POMOC</h2>
+                <p className="text-red-800 font-medium mb-6">
+                  Twoje objawy wskazują na stan zagrożenia życia. <strong>Nie rezerwuj wizyty w przychodni.</strong>
+                </p>
+                <a 
+                  href="tel:112" 
+                  className="inline-block bg-red-600 text-white font-bold py-4 px-8 rounded-2xl text-xl hover:bg-red-700 transition-all shadow-md"
+                >
+                  ZADZWOŃ POD 112
+                </a>
+                <p className="mt-4 text-sm text-red-700 underline">Udaj się na najbliższy Szpitalny Oddział Ratunkowy (SOR)</p>
+              </div>
+            </section>
+          ) : (
+            <section className="mt-7 animate-fade-up print:hidden">
+              <div className="mb-4 flex items-center gap-2.5">
+                <CalendarClock className="h-5 w-5 text-teal-600" />
+                <h2 className="text-base font-semibold text-ink-900">Dostępne placówki i wolne terminy</h2>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {facilities.map((facility) => (
+                  <div key={facility.name} className="flex flex-col rounded-3xl border border-ink-100 bg-white/85 p-5 shadow-card backdrop-blur-sm transition-all duration-200 hover:border-sage-200 hover:shadow-card sm:p-6">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sage-100 text-sage-600"><Building2 className="h-5 w-5" /></div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-[0.95rem] font-bold leading-snug text-ink-900">{facility.name}</h3>
+                        <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-500"><MapPin className="h-3.5 w-3.5 shrink-0" />{facility.address}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold text-ink-500 mb-2 uppercase tracking-wider">Wybierz termin wizyty:</p>
+                      {facility.appointments && facility.appointments.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {facility.appointments.map((slot) => (
+                            <button key={slot.id} onClick={() => { setSelectedSlot(slot); setBookedFacility(facility); }} className="inline-flex items-center gap-1.5 rounded-xl border border-sage-300 bg-sage-50 px-3 py-2 text-xs font-semibold text-sage-700 transition-all hover:bg-sage-600 hover:text-white cursor-pointer">
+                              <span>📅 {slot.date}</span><span className="font-bold">godz. {slot.time.slice(0, 5)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : <p className="text-xs text-ink-400 italic">Brak wolnych terminów online</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
-      {/* Sekcja historii analiz */}
+      {/* Sekcja historii analiz (poprawnie poza warunkiem placówek) */}
       {history.length > 0 && (
         <section className="mt-12 animate-fade-up print:hidden">
           <div className="mb-5 flex items-center justify-between gap-4">
