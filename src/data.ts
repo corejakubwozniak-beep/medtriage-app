@@ -40,6 +40,7 @@ export const URGENCY_STYLES: Record<AnalysisResult['urgency'], string> = {
 
 export const CARDIAC_FACILITIES: Facility[] = [
   {
+    id: 1, // <--- Dodane ID
     name: 'Centrum Medyczne Zielonki',
     address: 'ul. Krakowskie Przedmieście 12, Zielonki',
     earliestSlot: 'Dziś, godz. 16:30',
@@ -49,6 +50,7 @@ export const CARDIAC_FACILITIES: Facility[] = [
     direction: 'Kardiologia',
   },
   {
+    id: 2, // <--- Dodane ID
     name: 'Krakowskie Centrum Kardiologii',
     address: 'ul. Prądnicka 80, Kraków',
     earliestSlot: 'Jutro, godz. 09:00',
@@ -61,6 +63,7 @@ export const CARDIAC_FACILITIES: Facility[] = [
 
 export const GENERAL_FACILITIES: Facility[] = [
   {
+    id: 3, // <--- Dodane ID
     name: 'Centrum Medyczne Diagnostyka+',
     address: 'al. Niepodległości 220, Kraków',
     earliestSlot: 'Dziś, godz. 17:15',
@@ -70,6 +73,7 @@ export const GENERAL_FACILITIES: Facility[] = [
     direction: 'Diagnostyka ogólna',
   },
   {
+    id: 4, // <--- Dodane ID
     name: 'Przychodnia Rodzinna w Zielonkach',
     address: 'ul. Słoneczna 2, Zielonki',
     earliestSlot: 'Jutro, godz. 10:30',
