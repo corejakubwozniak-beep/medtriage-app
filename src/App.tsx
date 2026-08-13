@@ -12,6 +12,7 @@ import AdminDashboard from './components/AdminDashboard';
 import { supabase } from './supabase';
 import { Session } from '@supabase/supabase-js';
 
+
 const URGENCY_STYLES: Record<string, string> = {
   Planowy: 'bg-sage-100 text-sage-700 border-sage-200',
   Standardowy: 'bg-teal-50 text-teal-700 border-teal-200',
@@ -37,11 +38,28 @@ function App() {
 
   // Pobieranie placówek i terminów z Supabase
   const fetchFacilities = async () => {
-    const { data, error } = await supabase
+    // 1. Pobierz placówki
+    const { data: facData, error: facError } = await supabase
       .from('facilities')
-      .select('*, appointments(*)'); 
-    if (!error && data) {
-      setFacilities(data);
+      .select('*'); 
+      
+    if (facError || !facData) return;
+
+    // 2. Pobierz wolne terminy dla tych placówek
+    const { data: appData, error: appError } = await supabase
+      .from('appointments')
+      .select('*')
+      .eq('status', 'available');
+
+    if (!appError && appData) {
+      // Połącz placówki z ich slotami w kodzie, pomijając błędy relacji SQL
+      const combined = facData.map(fac => ({
+        ...fac,
+        appointments: appData.filter(app => app.facility_id === fac.id)
+      }));
+      setFacilities(combined);
+    } else {
+      setFacilities(facData);
     }
   };
 
