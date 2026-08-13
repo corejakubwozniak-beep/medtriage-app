@@ -32,6 +32,7 @@ export default function AdminDashboard({
     queryFn: async () => {
       if (!session?.user?.id) return [];
 
+      // 1. Pobierz ID placówki administratora
       const { data: facilityDataArray, error: facError } = await supabase
         .from('facilities')
         .select('id')
@@ -40,16 +41,37 @@ export default function AdminDashboard({
       if (facError || !facilityDataArray || facilityDataArray.length === 0) return [];
       const facilityData = facilityDataArray[0];
 
-      // Bezpieczne pobranie rezerwacji bez sztywnego Join SQL
-      const { data, error } = await supabase
+      // 2. Pobierz TYLKO wizyty (absolutnie bez żadnych relacji z nawiasami, które blokują zapytanie)
+      const { data: appData, error: appError } = await supabase
         .from('appointments')
-        .select(`*, facilities(name, address)`)
+        .select('*')
         .eq('facility_id', facilityData.id)
         .eq('status', 'booked')
         .order('date', { ascending: true });
 
-      if (error) throw error;
-      return data;
+      if (appError) {
+        console.error("Błąd pobierania wizyt:", appError);
+        throw appError;
+      }
+      if (!appData || appData.length === 0) return [];
+
+      // 3. Ręcznie dociągamy pacjentów (aby uniknąć błędu braku klucza obcego w bazie)
+      const patientIds = appData.map((a: any) => a.patient_uuid).filter(Boolean);
+      
+      if (patientIds.length > 0) {
+        const { data: patientsData } = await supabase
+          .from('patients_registry')
+          .select('id, encrypted_contact_data')
+          .in('id', patientIds);
+
+        // Łączymy wizyty z danymi pacjentów
+        return appData.map((app: any) => ({
+          ...app,
+          patients_registry: patientsData?.find(p => p.id === app.patient_uuid) || null
+        }));
+      }
+
+      return appData;
     },
     enabled: !!session?.user?.id && isMfaVerified,
   });
