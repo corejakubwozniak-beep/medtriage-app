@@ -92,28 +92,42 @@ function App() {
     setIsAdminView(false);
   };
 
-  // Obsługa analizy Gemini
   const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!symptoms.trim() || loading) return;
-    
-    setLoading(true);
-    setResult(null);
+  e.preventDefault();
+  const trimmed = symptoms.trim();
+  if (!trimmed || loading) return;
 
-    // Integracja z PRAWDZIWYM modelem Google Gemini
-    const aiResponse = await analyzeSymptomsWithGemini(symptoms, null);
-    
-    setResult({
-      direction: aiResponse.direction,
-      directionNote: aiResponse.explanation,
-      specialist: aiResponse.specialist,
-      specialistNote: '',
-      tests: aiResponse.tests,
-      urgency: aiResponse.priority as any
-    });
-    
+  // 1. Walidacja czysto techniczna na obecność bezsensownych ciągów (np. "aaksss")
+  const hasEnoughWords = trimmed.split(/\s+/).length >= 2 || trimmed.length >= 12;
+  const hasVowels = /[aeiouyąęóa-z]/i.test(trimmed);
+
+  if (!hasEnoughWords || !hasVowels) {
+    alert("Opis objawów jest zbyt krótki lub niezrozumiały. Prosimy o podanie pełniejszego opisu dolegliwości.");
+    return;
+  }
+
+  setLoading(true);
+  setResult(null);
+
+  const aiResponse = await analyzeSymptomsWithGemini(symptoms, null);
+
+  if (aiResponse.error) {
+    alert(aiResponse.explanation || "Nie udało się przeanalizować wpisanych objawów.");
     setLoading(false);
-  };
+    return;
+  }
+
+  setResult({
+    direction: aiResponse.direction,
+    directionNote: aiResponse.explanation,
+    specialist: aiResponse.specialist,
+    specialistNote: '',
+    tests: aiResponse.tests,
+    urgency: aiResponse.priority as any
+  });
+
+  setLoading(false);
+};
 
   return (
     <div className="min-h-screen">
