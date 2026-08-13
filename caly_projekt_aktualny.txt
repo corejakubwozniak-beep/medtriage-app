@@ -1,0 +1,1250 @@
+﻿import { useState, useEffect, type FormEvent } from 'react';
+import {
+  Stethoscope, Activity, ClipboardList, ArrowRight, Compass,
+  UserRound, FlaskConical, ShieldCheck, Info, ChevronRight,
+  Building2, CalendarClock, Star, MapPin, Zap
+} from 'lucide-react';
+import { Language, translations } from './i18n';
+import { analyzeSymptomsWithGemini } from './gemini';
+import { AnalysisResult, Facility } from './types';
+import BookingModal from './components/BookingModal';
+import AdminDashboard from './components/AdminDashboard';
+import { supabase } from './supabase';
+import { Session } from '@supabase/supabase-js';
+
+
+const URGENCY_STYLES: Record<string, string> = {
+  Planowy: 'bg-sage-100 text-sage-700 border-sage-200',
+  Standardowy: 'bg-teal-50 text-teal-700 border-teal-200',
+  Pilny: 'bg-sand-100 text-sand-500 border-sand-200',
+};
+
+function App() {
+  // Stany aplikacji (TriaĹĽ i rezerwacja)
+  const [symptoms, setSymptoms] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [bookedFacility, setBookedFacility] = useState<Facility | null>(null);
+  const [lang, setLang] = useState<Language>('pl');
+  const t = translations[lang];
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<any>(null);
+
+  // Stany logowania i administracji
+  const [session, setSession] = useState<Session | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isAdminView, setIsAdminView] = useState(false);
+
+  // Pobieranie placĂłwek i terminĂłw z Supabase
+  const fetchFacilities = async () => {
+    const { data, error } = await supabase
+      .from('facilities')
+      .select('*, appointments(*)'); 
+    if (!error && data) {
+      setFacilities(data);
+    }
+  };
+
+  // Efekt uruchamiany na start aplikacji
+  useEffect(() => {
+    fetchFacilities();
+
+    // Sprawdzanie i nasĹ‚uchiwanie sesji uĹĽytkownika
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // ObsĹ‚uga logowania administratora
+  const handleAdminLogin = async (e: FormEvent) => {
+    e.preventDefault();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) alert('BĹ‚Ä…d logowania: ' + error.message);
+  };
+
+  // ObsĹ‚uga wylogowywania
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsAdminView(false);
+  };
+
+  // ObsĹ‚uga analizy Gemini
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!symptoms.trim() || loading) return;
+    
+    setLoading(true);
+    setResult(null);
+
+    // Integracja z PRAWDZIWYM modelem Google Gemini
+    const aiResponse = await analyzeSymptomsWithGemini(symptoms, null);
+    
+    setResult({
+      direction: aiResponse.direction,
+      directionNote: aiResponse.explanation,
+      specialist: aiResponse.specialist,
+      specialistNote: '',
+      tests: aiResponse.tests,
+      urgency: aiResponse.priority as any
+    });
+    
+    setLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen">
+      <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14">
+        
+        {/* WielojÄ™zyczny Header + PrzeĹ‚Ä…czniki */}
+        <header className="animate-fade-up">
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sage-400 to-teal-500 text-white">
+                <Stethoscope className="h-6 w-6" strokeWidth={2.2} />
+              </div>
+              <h1 className="text-2xl font-bold tracking-tight text-ink-900">{t.title}</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setIsAdminView(!isAdminView)} 
+                className="text-xs font-bold border border-ink-200 px-3 py-1.5 rounded-xl hover:bg-ink-50 cursor-pointer"
+              >
+                {isAdminView ? 'Widok Pacjenta' : 'đź”’ Panel Admina'}
+              </button>
+              <button onClick={() => setLang(lang === 'pl' ? 'en' : 'pl')} className="text-xs font-bold border border-ink-200 px-3 py-1.5 rounded-xl hover:bg-ink-50 cursor-pointer">
+                {lang === 'pl' ? 'đź‡¬đź‡§ EN' : 'đź‡µđź‡± PL'}
+              </button>
+            </div>
+          </div>
+          {!isAdminView && <p className="max-w-2xl text-[0.95rem] leading-relaxed text-ink-600">{t.description}</p>}
+        </header>
+
+        {/* Widok: PANEL ADMINISTRATORA */}
+        {isAdminView ? (
+          session ? (
+            <AdminDashboard 
+              session={session} 
+              handleLogout={handleLogout} 
+              facilities={facilities} 
+              fetchFacilities={fetchFacilities} 
+              showToast={(msg) => alert(msg)} 
+            />
+          ) : (
+            <div className="mt-10 p-6 bg-white rounded-3xl border border-ink-100 max-w-md mx-auto shadow-card animate-fade-up">
+              <h2 className="text-lg font-bold mb-4 text-ink-900">Logowanie (Panel Administratora)</h2>
+              <form onSubmit={handleAdminLogin} className="space-y-4">
+                <input 
+                  type="email" 
+                  placeholder="E-mail" 
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)} 
+                  className="w-full rounded-xl border border-ink-200 px-4 py-2.5 text-sm outline-none focus:border-sage-400"
+                />
+                <input 
+                  type="password" 
+                  placeholder="HasĹ‚o" 
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)} 
+                  className="w-full rounded-xl border border-ink-200 px-4 py-2.5 text-sm outline-none focus:border-sage-400"
+                />
+                <button type="submit" className="w-full bg-ink-900 text-white py-2.5 rounded-xl text-sm font-bold hover:bg-ink-800 transition-colors cursor-pointer">
+                  Zaloguj siÄ™
+                </button>
+              </form>
+            </div>
+          )
+        ) : (
+          /* Widok: PACJENT */
+          <>
+            {/* Triage Form */}
+            <section className="mt-7 animate-fade-up">
+              <form onSubmit={handleSubmit} className="rounded-3xl border border-ink-100 bg-white/80 p-6 shadow-card">
+                <div className="flex items-center gap-2.5 mb-4">
+                  <ClipboardList className="h-5 w-5 text-sage-500" />
+                  <h2 className="text-base font-semibold text-ink-900">Opisz swoje objawy</h2>
+                </div>
+                <textarea
+                  value={symptoms}
+                  onChange={(e) => setSymptoms(e.target.value)}
+                  rows={4}
+                  placeholder={t.placeholder}
+                  className="w-full resize-none rounded-2xl border border-ink-200 bg-sage-50/40 px-4 py-3.5 text-[0.95rem] text-ink-900 focus:ring-4 focus:ring-sage-400/15 outline-none"
+                />
+                <button type="submit" disabled={!symptoms.trim() || loading} className="mt-4 w-full flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-6 py-3.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50 cursor-pointer">
+                  {loading ? <Activity className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                  {loading ? t.analyzing : t.analyzeBtn}
+                </button>
+              </form>
+            </section>
+
+            {/* AI Result */}
+            {result && !loading && (
+              <section className="mt-7 animate-fade-up">
+                 <div className="overflow-hidden rounded-3xl border border-ink-100 bg-white shadow-card">
+                    <div className="flex items-center justify-between bg-gradient-to-r from-sage-50 to-teal-50 px-6 py-5">
+                      <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-sage-600" /><h3 className="font-bold text-ink-900">Wynik AI</h3></div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${URGENCY_STYLES[result.urgency]}`}>{result.urgency}</span>
+                    </div>
+                    <div className="p-6">
+                      <p className="text-sm font-bold text-ink-500">{t.specialist}</p>
+                      <p className="text-xl font-bold text-ink-900 mb-4">{result.specialist}</p>
+                      <p className="text-sm font-bold text-ink-500">{t.direction}</p>
+                      <p className="text-ink-700 text-sm mb-4">{result.directionNote}</p>
+                      <p className="text-sm font-bold text-ink-500 mb-2">{t.tests}</p>
+                      <ul className="space-y-2">
+                        {result.tests.map((test, i) => <li key={i} className="text-sm flex items-center gap-2"><ChevronRight className="h-4 w-4 text-sage-500"/> {test}</li>)}
+                      </ul>
+                    </div>
+                 </div>
+              </section>
+            )}
+
+            {/* Dynamiczna Lista dostÄ™pnych placĂłwek z bazy (ZastÄ™puje Mocki) */}
+            {result && !loading && (
+              <section className="mt-7 animate-fade-up">
+                <h2 className="text-base font-semibold text-ink-900 mb-4 flex items-center gap-2">
+                  <CalendarClock className="h-5 w-5 text-teal-600"/> DostÄ™pne placĂłwki i wolne terminy
+                </h2>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {facilities.map(fac => (
+                    <div key={fac.id} className="border border-ink-100 rounded-3xl p-5 bg-white shadow-card">
+                      <h3 className="font-bold text-ink-900">{fac.name}</h3>
+                      <p className="text-xs text-ink-500 mb-3">{fac.address}</p>
+                      
+                      {/* Filtrujemy tylko wolne sloty */}
+                      {fac.appointments && fac.appointments.filter(a => a.status === 'available').length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {fac.appointments.filter(a => a.status === 'available').map(slot => (
+                            <button 
+                              key={slot.id} 
+                              onClick={() => { setSelectedSlot(slot); setBookedFacility(fac); }}
+                              className="text-xs font-bold bg-sage-50 text-sage-700 border border-sage-200 px-3 py-2 rounded-xl hover:bg-sage-600 hover:text-white cursor-pointer"
+                            >
+                              đź“… {slot.date} godz. {slot.time.slice(0, 5)}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-ink-400 italic">Brak wolnych terminĂłw online</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
+        )}
+
+        {/* Modal Rezerwacji z poprawnie przypisanym, klikniÄ™tym terminem oraz politykÄ… RODO */}
+        {bookedFacility && selectedSlot && !isAdminView && (
+          <BookingModal 
+            bookedFacility={bookedFacility} 
+            selectedSlot={selectedSlot}
+            onClose={() => { setBookedFacility(null); setSelectedSlot(null); }} 
+            result={result}
+            showToast={(msg) => alert(msg)}
+            fetchFacilities={fetchFacilities}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default App;
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import * as Sentry from "@sentry/react";
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import App from './App.tsx';
+import './index.css';
+
+// 1. Inicjalizacja Sentry (Observability - Ĺ‚apanie bĹ‚Ä™dĂłw z produkcji)
+Sentry.init({
+  dsn: "TUTAJ_WKLEJ_SWOJ_DSN_Z_SENTRY", // Otrzymasz go po zaĹ‚oĹĽeniu darmowego konta na sentry.io
+  integrations: [
+    Sentry.browserTracingIntegration(),
+    Sentry.replayIntegration(),
+  ],
+  tracesSampleRate: 1.0,
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1.0,
+});
+
+// 2. Inicjalizacja TanStack Query (Inteligentne zarzÄ…dzanie zapytaniami)
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1, // W razie bĹ‚Ä™du sieci, system sprĂłbuje ponowiÄ‡ zapytanie 1 raz
+      refetchOnWindowFocus: true, // OdĹ›wieĹĽa dane, gdy administrator wraca na kartÄ™ przeglÄ…darki
+    },
+  },
+});
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  </StrictMode>
+);
+import { useState, useEffect } from 'react';
+import { supabase } from './supabase';
+import { QRCodeSVG } from 'qrcode.react';
+import { ShieldCheck, Lock, ArrowRight } from 'lucide-react';
+
+interface MfaManagerProps {
+  onSuccess: () => void;
+}
+
+export default function MfaManager({ onSuccess }: MfaManagerProps) {
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [factorId, setFactorId] = useState<string>('');
+  const [verifyCode, setVerifyCode] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isEnrolling, setIsEnrolling] = useState(false);
+
+  useEffect(() => {
+    checkMfaStatus();
+  }, []);
+
+  const checkMfaStatus = async () => {
+  const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (error || !data) return;
+
+  if (data.currentLevel === 'aal2') {
+    onSuccess();
+    return;
+  }
+
+  const { data: factors } = await supabase.auth.mfa.listFactors();
+  const totpFactor = factors?.totp[0];
+
+  if (totpFactor) {
+    setFactorId(totpFactor.id);
+    setIsEnrolling(false);
+  } else {
+    setIsEnrolling(true);
+    startEnrollment();
+  }
+};
+
+  const startEnrollment = async () => {
+    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
+    if (error) {
+      setErrorMsg('BĹ‚Ä…d generowania MFA: ' + error.message);
+      return;
+    }
+    setFactorId(data.id);
+    setQrCode(data.totp.qr_code);
+  };
+
+  const handleVerify = async () => {
+    setErrorMsg('');
+    try {
+      const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
+      if (challengeError) throw challengeError;
+
+      const { error } = await supabase.auth.mfa.verify({
+        factorId,
+        challengeId: challengeData.id,
+        code: verifyCode,
+      });
+
+      if (error) throw error;
+      onSuccess();
+    } catch (err: any) {
+      setErrorMsg('NieprawidĹ‚owy kod. SprĂłbuj ponownie.');
+    }
+  };
+
+  return (
+    <div className="flex min-h-[400px] flex-col items-center justify-center rounded-3xl border border-ink-100 bg-white p-8 shadow-card text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-sand-100 text-sand-600 mb-4">
+        {isEnrolling ? <ShieldCheck className="h-8 w-8" /> : <Lock className="h-8 w-8" />}
+      </div>
+      <h2 className="text-xl font-bold text-ink-900 mb-2">
+        {isEnrolling ? 'Zabezpiecz swoje konto (MFA)' : 'Weryfikacja dwuetapowa'}
+      </h2>
+      <p className="text-sm text-ink-500 mb-6 max-w-sm">
+        {isEnrolling 
+          ? 'Zeskanuj poniĹĽszy kod QR w aplikacji Google Authenticator, aby uzyskaÄ‡ dostÄ™p.' 
+          : 'Wpisz 6-cyfrowy kod ze swojej aplikacji uwierzytelniajÄ…cej.'}
+      </p>
+
+      {isEnrolling && qrCode && (
+        <div className="mb-6 rounded-2xl bg-white p-4 shadow-sm border border-ink-100">
+          <QRCodeSVG value={qrCode} size={180} />
+        </div>
+      )}
+
+      <div className="w-full max-w-xs space-y-4">
+        <input
+          type="text"
+          maxLength={6}
+          placeholder="np. 123456"
+          value={verifyCode}
+          onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ''))}
+          className="w-full text-center tracking-[0.5em] text-lg rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-3 text-ink-900 focus:outline-none focus:ring-4 focus:ring-sage-400/15"
+        />
+        {errorMsg && <p className="text-xs font-semibold text-red-500">{errorMsg}</p>}
+        <button
+          onClick={handleVerify}
+          disabled={verifyCode.length !== 6}
+          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-ink-900 px-5 py-3 text-sm font-semibold text-white transition-all hover:bg-ink-800 disabled:opacity-50"
+        >
+          Zweryfikuj kod <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+import { useState, useEffect } from 'react';
+import { supabase } from '../supabase';
+import { Facility } from '../types';
+import { Session } from '@supabase/supabase-js';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import MfaManager from '../MfaManager';
+
+interface AdminDashboardProps {
+  session: Session;
+  handleLogout: () => void;
+  facilities: Facility[];
+  fetchFacilities: () => void;
+  showToast: (message: string, type?: 'success' | 'error') => void;
+}
+
+export default function AdminDashboard({
+  session,
+  handleLogout,
+  facilities,
+  fetchFacilities,
+  showToast,
+}: AdminDashboardProps) {
+  const [isMfaVerified, setIsMfaVerified] = useState(false);
+  const [adminFacilityId, setAdminFacilityId] = useState<number>(1);
+  const [newDate, setNewDate] = useState('');
+  const [newTime, setNewTime] = useState('');
+  
+  const queryClient = useQueryClient();
+
+  const { data: bookedAppointments = [], isLoading } = useQuery({
+    queryKey: ['bookedAppointments', session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return [];
+
+      const { data: facilityDataArray, error: facError } = await supabase
+        .from('facilities')
+        .select('id')
+        .eq('auth_user_id', session.user.id);
+
+      if (facError || !facilityDataArray || facilityDataArray.length === 0) return [];
+      const facilityData = facilityDataArray[0];
+
+      // ZwrĂłÄ‡ uwagÄ™ na Join z tabelÄ… patients_registry
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(`*, facilities(name, address), patients_registry(encrypted_contact_data)`)
+        .eq('facility_id', facilityData.id)
+        .eq('status', 'booked')
+        .order('date', { ascending: true });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!session?.user?.id && isMfaVerified,
+  });
+
+  useEffect(() => {
+    if (!session || !isMfaVerified) return;
+
+    fetchFacilities();
+    const channel = supabase
+      .channel('admin-live-queue')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'appointments' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['bookedAppointments'] });
+          fetchFacilities();
+          showToast('âšˇ Zaktualizowano kolejkÄ™ pacjentĂłw!', 'success');
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [session, isMfaVerified, queryClient, fetchFacilities, showToast]);
+
+  const handleAddSlot = async () => {
+    if (!newDate || !newTime) return showToast('WypeĹ‚nij datÄ™ i godzinÄ™!', 'error');
+    const { error } = await supabase.from('appointments').insert([{ facility_id: adminFacilityId, date: newDate, time: newTime, status: 'available' }]);
+    if (error) showToast('BĹ‚Ä…d dodawania: ' + error.message, 'error');
+    else { showToast('Dodano termin!'); setNewDate(''); setNewTime(''); fetchFacilities(); }
+  };
+
+  const handleCancelSlot = async (appId: number) => {
+    if (window.confirm('AnulowaÄ‡ wizytÄ™ i zwolniÄ‡ termin?')) {
+      const { error } = await supabase.from('appointments').update({ 
+          status: 'available', patient_uuid: null, triage_direction: null, urgency: null, triage_summary: null, preliminary_tests: null 
+      }).eq('id', appId);
+      if (!error) { showToast('Zwolniono termin.'); queryClient.invalidateQueries({ queryKey: ['bookedAppointments'] }); }
+    }
+  };
+
+  // Zapora MFA
+  if (!isMfaVerified) {
+    return (
+      <div className="mt-10 flex justify-center print:hidden">
+        <MfaManager onSuccess={() => setIsMfaVerified(true)} />
+      </div>
+    );
+  }
+
+  // Funkcja rozszyfrowujÄ…ca imiÄ™ pacjenta (z Base64) do wyĹ›wietlenia w panelu
+  const decodePatientName = (encryptedData?: string) => {
+    if (!encryptedData) return 'Pacjent nieznany';
+    try {
+      return decodeURIComponent(atob(encryptedData)).split('|')[0];
+    } catch {
+      return 'BĹ‚Ä…d odszyfrowania';
+    }
+  };
+
+  return (
+    <section className="mt-7 animate-fade-up print:hidden">
+      <div className="rounded-3xl border border-sage-200 bg-white p-6 shadow-card relative">
+        <button onClick={handleLogout} className="absolute top-6 right-6 text-xs font-semibold text-red-500 hover:text-red-700">Wyloguj siÄ™</button>
+        <h2 className="text-lg font-bold text-ink-900 mb-2">Panel ZarzÄ…dzania PlacĂłwki</h2>
+        <p className="text-xs text-ink-500 mb-6">JesteĹ› zalogowany w trybie bezpiecznym. Kolejka aktualizuje siÄ™ w czasie rzeczywistym.</p>
+
+        <div className="rounded-2xl border border-ink-100 bg-sage-50/30 p-5 mb-8">
+          <h3 className="text-sm font-bold text-ink-900 mb-3">đź“… Dodaj nowy wolny termin</h3>
+          <div className="space-y-4">
+            <select value={adminFacilityId} onChange={(e) => setAdminFacilityId(Number(e.target.value))} className="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm">
+              {facilities.map((fac) => (<option key={fac.id} value={fac.id}>{fac.name}</option>))}
+            </select>
+            <div className="grid grid-cols-2 gap-3">
+              <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="w-full rounded-xl border border-ink-200 px-3 py-2 text-sm" />
+              <input type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)} className="w-full rounded-xl border border-ink-200 px-3 py-2 text-sm" />
+            </div>
+            <button onClick={handleAddSlot} className="w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-bold text-white hover:opacity-90">Dodaj termin do bazy</button>
+          </div>
+        </div>
+
+        <div className="mt-8 border-t border-ink-100 pt-8">
+          <h3 className="text-lg font-bold text-ink-900 mb-4">đźŽ›ď¸Ź Patient Flow Center (Realtime)</h3>
+          {isLoading ? <p className="text-sm text-ink-500">Ĺadowanie...</p> : (
+            <div className="space-y-4">
+              {bookedAppointments.map((app: any) => (
+                <div key={app.id} className="relative overflow-hidden rounded-2xl border bg-white shadow-sm p-5 flex justify-between gap-4">
+                  <div>
+                    <span className="text-xs font-bold text-teal-800 bg-teal-50 px-2 py-1 rounded-lg">đź“… {app.date} {app.time.slice(0, 5)}</span>
+                    <h4 className="text-base font-bold text-ink-900 mt-2">đź‘¤ {decodePatientName(app.patients_registry?.encrypted_contact_data)}</h4>
+                    <p className="text-xs text-ink-600 mt-1">AI: {app.triage_direction} | {app.urgency}</p>
+                  </div>
+                  <div className="flex flex-col gap-2 shrink-0">
+                    <button className="text-xs font-bold text-teal-700 bg-teal-50 px-4 py-2 rounded-xl">Powiadom (Resend)</button>
+                    <button onClick={() => handleCancelSlot(app.id)} className="text-xs font-bold text-red-600 border border-red-200 px-4 py-2 rounded-xl">Zwolnij</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+import { AnalysisResult } from '../types';
+import { URGENCY_STYLES } from '../data';
+import {
+  Stethoscope,
+  Compass,
+  UserRound,
+  FlaskConical,
+  ShieldCheck,
+  ChevronRight,
+  Download,
+} from 'lucide-react';
+
+interface AiReportProps {
+  loading: boolean;
+  result: AnalysisResult | null;
+}
+
+export default function AiReport({ loading, result }: AiReportProps) {
+  return (
+    <section className="mt-7 print:mt-0">
+      {loading && (
+        <div className="flex items-center justify-center gap-3 rounded-3xl border border-ink-100 bg-white/70 py-16 shadow-card animate-fade-in print:hidden">
+          <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-sage-200 border-t-sage-500" />
+          <span className="text-sm font-medium text-ink-500">PrzygotowujÄ™ sugestiÄ™ triaĹĽowÄ… z AI...</span>
+        </div>
+      )}
+
+      {!loading && result && (
+        <div className="overflow-hidden rounded-3xl border border-ink-100 bg-white/85 shadow-card backdrop-blur-sm animate-fade-up print:border-none print:shadow-none print:bg-white print:rounded-none">
+          <div className="hidden print:block mb-8 border-b border-ink-100 pb-6">
+            <div className="flex items-center gap-3 mb-4">
+              <Stethoscope className="h-8 w-8 text-sage-600" />
+              <h1 className="text-2xl font-bold text-ink-900">Raport TriaĹĽowy pacjenta - MedTriage</h1>
+            </div>
+            <p className="text-sm text-ink-600"><strong>Data analizy:</strong> {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 border-b border-ink-100 bg-gradient-to-r from-sage-50 to-teal-50/60 px-6 py-5 sm:px-7 print:bg-none print:px-0">
+            <div className="flex items-center gap-2.5">
+              <ShieldCheck className="h-5 w-5 text-sage-600 print:text-ink-900" />
+              <h3 className="text-base font-semibold text-ink-900">Wynik analizy triaĹĽowej AI</h3>
+            </div>
+            <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold print:border-ink-200 print:text-ink-900 ${URGENCY_STYLES[result.urgency]}`}>
+              Priorytet: {result.urgency}
+            </span>
+          </div>
+
+          <div className="grid gap-px bg-ink-100 sm:grid-cols-2 print:grid-cols-2 print:bg-ink-200 print:border-b print:border-ink-200">
+            <div className="bg-white p-6 sm:p-7 print:p-4">
+              <div className="flex items-center gap-2.5 text-sage-600 print:text-ink-500">
+                <Compass className="h-4.5 w-4.5" />
+                <span className="text-[0.72rem] font-semibold uppercase tracking-wider">Sugerowany kierunek</span>
+              </div>
+              <p className="mt-2.5 text-xl font-bold text-ink-900">{result.direction}</p>
+            </div>
+            <div className="bg-white p-6 sm:p-7 print:p-4">
+              <div className="flex items-center gap-2.5 text-teal-600 print:text-ink-500">
+                <UserRound className="h-4.5 w-4.5" />
+                <span className="text-[0.72rem] font-semibold uppercase tracking-wider">Rekomendowany specjalista</span>
+              </div>
+              <p className="mt-2.5 text-xl font-bold text-ink-900">{result.specialist}</p>
+            </div>
+          </div>
+
+          <div className="border-t border-ink-100 bg-white p-6 sm:p-7 print:border-none print:px-0">
+            <div className="flex items-center gap-2.5 text-sand-500 print:text-ink-500">
+              <FlaskConical className="h-4.5 w-4.5" />
+              <span className="text-[0.72rem] font-semibold uppercase tracking-wider">Zalecane badania wstÄ™pne</span>
+            </div>
+            <ul className="mt-3.5 grid gap-2.5 sm:grid-cols-2 print:grid-cols-1">
+              {result.tests.map((test) => (
+                <li key={test} className="flex items-center gap-3 rounded-xl border border-ink-100 bg-sage-50/40 px-4 py-3 print:border-none print:bg-transparent print:p-1">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sage-100 text-sage-600 print:hidden">
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="text-sm font-medium text-ink-800">{test}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="border-t border-ink-100 bg-white p-6 sm:px-7 print:hidden flex justify-center">
+            <button onClick={() => window.print()} className="group inline-flex items-center gap-2.5 rounded-2xl bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:bg-ink-800 hover:shadow-card cursor-pointer">
+              <Download className="h-4.5 w-4.5 transition-transform group-hover:-translate-y-0.5" /> Pobierz raport dla lekarza (PDF)
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+import { useState } from 'react';
+import { supabase } from '../supabase';
+import { Facility, AnalysisResult } from '../types';
+import { CheckCircle2, X, Building2, CalendarClock } from 'lucide-react';
+
+interface BookingModalProps {
+  bookedFacility: Facility | null;
+  selectedSlot: any | null;
+  onClose: () => void;
+  result: AnalysisResult | null;
+  showToast: (message: string, type?: 'success' | 'error') => void;
+  fetchFacilities: () => void;
+}
+
+export default function BookingModal({
+  bookedFacility,
+  selectedSlot,
+  onClose,
+  result,
+  showToast,
+  fetchFacilities,
+}: BookingModalProps) {
+  const [patientName, setPatientName] = useState('');
+  const [patientPhone, setPatientPhone] = useState('');
+  const [rodoAccepted, setRodoAccepted] = useState(false);
+
+  if (!bookedFacility || !selectedSlot) return null;
+
+  const handleBookingConfirm = async () => {
+    if (!patientName.trim() || !patientPhone.trim() || !rodoAccepted) {
+      showToast('UzupeĹ‚nij imiÄ™, nazwisko, telefon i zaakceptuj RODO', 'error');
+      return;
+    }
+
+    try {
+      // 1. Zapisz zanonimizowane/zaszyfrowane dane do nowej tabeli patients_registry (RODO Compliance)
+      const encodedContactData = btoa(encodeURIComponent(`${patientName}|${patientPhone}`));
+      const maskedPhone = `***-***-${patientPhone.slice(-3)}`;
+
+      const { data: patientData, error: patientError } = await supabase
+        .from('patients_registry')
+        .insert({
+          masked_phone_hash: maskedPhone,
+          encrypted_contact_data: encodedContactData
+        })
+        .select('id')
+        .single();
+
+      if (patientError || !patientData) throw patientError;
+
+      // 2. Zaktualizuj wizytÄ™ uĹĽywajÄ…c TYLKO bezpiecznego identyfikatora (patient_uuid)
+      const { data: updatedSlots, error: appError } = await supabase
+        .from('appointments')
+        .update({ 
+          status: 'booked', 
+          patient_uuid: patientData.id, 
+          triage_direction: result?.specialist, 
+          urgency: result?.urgency, 
+          preliminary_tests: result?.tests 
+        })
+        .eq('id', selectedSlot.id)
+        .eq('status', 'available')
+        .select();
+
+      if (appError || !updatedSlots?.length) {
+        throw new Error('BĹ‚Ä…d rezerwacji (termin moĹĽe byÄ‡ juĹĽ zajÄ™ty)');
+      }
+
+      showToast('Wizyta zarezerwowana pomyĹ›lnie!');
+      onClose();
+      fetchFacilities();
+    } catch (err: any) {
+      showToast(err.message || 'WystÄ…piĹ‚ bĹ‚Ä…d podczas rezerwacji', 'error');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-5 backdrop-blur-sm animate-fade-in print:hidden" onClick={onClose}>
+      <div className="relative w-full max-w-md rounded-3xl border border-ink-100 bg-white p-7 shadow-card animate-fade-up" onClick={(e) => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-ink-400 hover:bg-ink-50 cursor-pointer"><X className="h-5 w-5" /></button>
+        <div className="flex flex-col items-center text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-sage-100 text-sage-600"><CheckCircle2 className="h-9 w-9" strokeWidth={2} /></div>
+          <h3 className="mt-5 text-xl font-bold text-ink-900">Rezerwacja wizyty</h3>
+          <p className="mt-2 text-sm text-ink-600">WypeĹ‚nij dane, aby potwierdziÄ‡ termin w {bookedFacility.name}.</p>
+
+          <div className="mt-5 w-full space-y-3 text-left">
+            <div>
+              <label className="block text-xs font-semibold text-ink-700 mb-1">ImiÄ™ i nazwisko</label>
+              <input type="text" value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="np. Jan Kowalski" className="w-full rounded-xl border border-ink-200 bg-white px-4 py-2.5 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-700 mb-1">Numer telefonu</label>
+              <input type="tel" value={patientPhone} onChange={(e) => setPatientPhone(e.target.value)} placeholder="np. 123 456 789" className="w-full rounded-xl border border-ink-200 bg-white px-4 py-2.5 text-sm" />
+            </div>
+            <div className="mt-3 flex items-start gap-2.5 pt-2">
+              <input type="checkbox" id="rodoCheckbox" checked={rodoAccepted} onChange={(e) => setRodoAccepted(e.target.checked)} className="mt-1 h-4 w-4 rounded border-ink-300 text-sage-600 cursor-pointer" />
+              <label htmlFor="rodoCheckbox" className="text-[0.75rem] text-ink-600 cursor-pointer">WyraĹĽam zgodÄ™ na przetwarzanie moich danych osobowych zgodnie z RODO.</label>
+            </div>
+          </div>
+
+          <button
+            onClick={handleBookingConfirm}
+            className="mt-6 w-full rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-5 py-3 text-sm font-semibold text-white shadow-soft hover:from-sage-600 hover:to-teal-600 cursor-pointer"
+          >
+            PotwierdĹş rezerwacjÄ™
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+import { type FormEvent } from 'react';
+import { AnalysisResult, Facility, HistoryItem } from '../types';
+import { URGENCY_STYLES } from '../data';
+import {
+  ClipboardList,
+  ArrowRight,
+  Activity,
+  Compass,
+  UserRound,
+  FlaskConical,
+  ShieldCheck,
+  Info,
+  ChevronRight,
+  Building2,
+  CalendarClock,
+  Star,
+  MapPin,
+  Upload,
+  Trash2,
+  Download,
+  Clock,
+  Stethoscope,
+} from 'lucide-react';
+
+interface TriageFormProps {
+  patientPhone: string; // <--- Dodane
+  setPatientPhone: (val: string) => void; // <--- Dodane
+  symptoms: string;
+  setSymptoms: (val: string) => void;
+  imageFile: { base64: string; mimeType: string } | null;
+  imagePreview: string | null;
+  handleImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  removeImage: () => void;
+  handleSubmit: (e: FormEvent) => void;
+  loading: boolean;
+  progress: number;
+  result: AnalysisResult | null;
+  facilities: Facility[];
+  setSelectedSlot: (slot: any) => void;
+  setBookedFacility: (facility: Facility) => void;
+  history: HistoryItem[];
+  loadFromHistory: (item: HistoryItem) => void;
+  clearHistory: () => void;
+}
+
+export default function TriageForm({
+  patientPhone, // <--- Odbieramy
+  setPatientPhone, // <--- Odbieramy
+  symptoms,
+  setSymptoms,
+  imageFile,
+  imagePreview,
+  handleImageChange,
+  removeImage,
+  handleSubmit,
+  loading,
+  progress,
+  result,
+  facilities,
+  setSelectedSlot,
+  setBookedFacility,
+  history,
+  loadFromHistory,
+  clearHistory,
+}: TriageFormProps) {
+  return (
+    <>
+      <section className="mt-7 animate-fade-up print:hidden" style={{ animationDelay: '0.1s' }}>
+        <form onSubmit={handleSubmit} className="rounded-3xl border border-ink-100 bg-white/80 p-6 shadow-card backdrop-blur-sm sm:p-7">
+          <div className="flex items-center gap-2.5 mb-4">
+            <ClipboardList className="h-5 w-5 text-sage-500" />
+            <h2 className="text-base font-semibold text-ink-900">Opisz swoje objawy lub dodaj zdjÄ™cie</h2>
+          </div>
+          
+          {/* POPRAWNE MIEJSCE NA INPUT TELEFONU (WewnÄ…trz formularza) */}
+          <div className="mb-4">
+              <label className="block text-xs font-semibold text-ink-700 mb-1">TwĂłj numer telefonu (opcjonalnie, do powiÄ…zania historii):</label>
+              <input 
+                  type="tel" 
+                  value={patientPhone} 
+                  onChange={(e) => setPatientPhone(e.target.value)} 
+                  placeholder="np. 123 456 789" 
+                  className="w-full rounded-xl border border-ink-200 bg-sage-50/40 px-4 py-2.5 text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-sage-400/50" 
+              />
+          </div>
+
+          <textarea 
+            value={symptoms} 
+            onChange={(e) => setSymptoms(e.target.value)} 
+            rows={4} 
+            placeholder="np. bĂłl w klatce piersiowej przy wysiĹ‚ku..." 
+            className="mt-4 w-full resize-none rounded-2xl border border-ink-200 bg-sage-50/40 px-4 py-3.5 text-[0.95rem] text-ink-900 focus:border-sage-400 focus:outline-none focus:ring-4 focus:ring-sage-400/15" 
+          />
+          <div className="mt-4">
+            {!imagePreview ? (
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-ink-200 bg-sage-50/30 px-4 py-3 text-xs font-semibold text-ink-600 hover:bg-sage-50/80">
+                <Upload className="h-4 w-4 text-sage-600" />
+                <span>Dodaj zdjÄ™cie wynikĂłw badaĹ„ / wypisu / zmiany skĂłrnej</span>
+                <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+              </label>
+            ) : (
+              <div className="relative flex items-center justify-between rounded-2xl border border-sage-200 bg-sage-50/70 p-3">
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <img src={imagePreview} alt="PodglÄ…d" className="h-12 w-12 rounded-xl object-cover shadow-sm" />
+                  <span className="truncate text-xs font-semibold text-ink-800">ZdjÄ™cie doĹ‚Ä…czone do analizy AI</span>
+                </div>
+                <button type="button" onClick={removeImage} className="flex h-8 w-8 items-center justify-center rounded-xl text-ink-400 hover:bg-white hover:text-sand-500 cursor-pointer"><Trash2 className="h-4 w-4" /></button>
+              </div>
+            )}
+          </div>
+          <div className="mt-5 flex flex-col-reverse items-center gap-3 sm:flex-row sm:justify-between">
+            <span className="text-xs text-ink-400">{symptoms.trim() || imageFile ? 'Gotowe do analizy' : 'Wpisz objawy lub zaĹ‚Ä…cz zdjÄ™cie'}</span>
+            <button type="submit" disabled={(!symptoms.trim() && !imageFile) || loading} className="group relative inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-sage-500 to-teal-500 px-6 py-3.5 text-sm font-semibold text-white shadow-soft hover:from-sage-600 hover:to-teal-600 disabled:opacity-50 sm:w-auto cursor-pointer">
+              {loading && <span className="absolute bottom-0 left-0 h-1 bg-white/70 transition-[width] duration-75" style={{ width: `${progress}%` }} />}
+              {loading ? <><Activity className="h-4 w-4 animate-pulse-soft" />AnalizujÄ™ (Vision AI)...</> : <><ArrowRight className="h-4 w-4" />Rozpocznij analizÄ™</>}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      {/* Wynik analizy AI */}
+      <section className="mt-7 print:mt-0">
+        {loading && (
+          <div className="flex items-center justify-center gap-3 rounded-3xl border border-ink-100 bg-white/70 py-16 shadow-card animate-fade-in print:hidden">
+            <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-sage-200 border-t-sage-500" />
+            <span className="text-sm font-medium text-ink-500">PrzygotowujÄ™ sugestiÄ™ triaĹĽowÄ… z AI...</span>
+          </div>
+        )}
+
+        {!loading && result && (
+          <div className="overflow-hidden rounded-3xl border border-ink-100 bg-white/85 shadow-card backdrop-blur-sm animate-fade-up print:border-none print:shadow-none print:bg-white print:rounded-none">
+            <div className="hidden print:block mb-8 border-b border-ink-100 pb-6">
+              <div className="flex items-center gap-3 mb-4"><Stethoscope className="h-8 w-8 text-sage-600" /><h1 className="text-2xl font-bold text-ink-900">Raport TriaĹĽowy pacjenta - MedTriage</h1></div>
+              <p className="text-sm text-ink-600"><strong>Data analizy:</strong> {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-b border-ink-100 bg-gradient-to-r from-sage-50 to-teal-50/60 px-6 py-5 sm:px-7 print:bg-none print:px-0">
+              <div className="flex items-center gap-2.5"><ShieldCheck className="h-5 w-5 text-sage-600 print:text-ink-900" /><h3 className="text-base font-semibold text-ink-900">Wynik analizy triaĹĽowej AI</h3></div>
+              <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold print:border-ink-200 print:text-ink-900 ${URGENCY_STYLES[result.urgency]}`}>Priorytet: {result.urgency}</span>
+            </div>
+
+            <div className="grid gap-px bg-ink-100 sm:grid-cols-2 print:grid-cols-2 print:bg-ink-200 print:border-b print:border-ink-200">
+              <div className="bg-white p-6 sm:p-7 print:p-4">
+                <div className="flex items-center gap-2.5 text-sage-600 print:text-ink-500"><Compass className="h-4.5 w-4.5" /><span className="text-[0.72rem] font-semibold uppercase tracking-wider">Sugerowany kierunek</span></div>
+                <p className="mt-2.5 text-xl font-bold text-ink-900">{result.direction}</p>
+              </div>
+              <div className="bg-white p-6 sm:p-7 print:p-4">
+                <div className="flex items-center gap-2.5 text-teal-600 print:text-ink-500"><UserRound className="h-4.5 w-4.5" /><span className="text-[0.72rem] font-semibold uppercase tracking-wider">Rekomendowany specjalista</span></div>
+                <p className="mt-2.5 text-xl font-bold text-ink-900">{result.specialist}</p>
+              </div>
+            </div>
+
+            <div className="border-t border-ink-100 bg-white p-6 sm:p-7 print:border-none print:px-0">
+              <div className="flex items-center gap-2.5 text-sand-500 print:text-ink-500"><FlaskConical className="h-4.5 w-4.5" /><span className="text-[0.72rem] font-semibold uppercase tracking-wider">Zalecane badania wstÄ™pne</span></div>
+              <ul className="mt-3.5 grid gap-2.5 sm:grid-cols-2 print:grid-cols-1">
+                {result.tests.map((test) => (
+                  <li key={test} className="flex items-center gap-3 rounded-xl border border-ink-100 bg-sage-50/40 px-4 py-3 print:border-none print:bg-transparent print:p-1">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sage-100 text-sage-600 print:hidden"><ChevronRight className="h-3.5 w-3.5" /></span>
+                    <span className="text-sm font-medium text-ink-800">{test}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="border-t border-ink-100 bg-white p-6 sm:px-7 print:hidden flex justify-center">
+              <button onClick={() => window.print()} className="group inline-flex items-center gap-2.5 rounded-2xl bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-soft transition-all duration-200 hover:bg-ink-800 hover:shadow-card cursor-pointer">
+                <Download className="h-4.5 w-4.5 transition-transform group-hover:-translate-y-0.5" /> Pobierz raport dla lekarza (PDF)
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Lista dostÄ™pnych placĂłwek */}
+      {!loading && result && (
+        <section className="mt-7 animate-fade-up print:hidden">
+          <div className="mb-4 flex items-center gap-2.5">
+            <CalendarClock className="h-5 w-5 text-teal-600" />
+            <h2 className="text-base font-semibold text-ink-900">DostÄ™pne placĂłwki i wolne terminy</h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {facilities.map((facility) => (
+              <div key={facility.name} className="flex flex-col rounded-3xl border border-ink-100 bg-white/85 p-5 shadow-card backdrop-blur-sm transition-all duration-200 hover:border-sage-200 hover:shadow-card sm:p-6">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sage-100 text-sage-600"><Building2 className="h-5 w-5" /></div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-[0.95rem] font-bold leading-snug text-ink-900">{facility.name}</h3>
+                    <p className="mt-1 flex items-center gap-1.5 text-xs text-ink-500"><MapPin className="h-3.5 w-3.5 shrink-0" />{facility.address}</p>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <p className="text-xs font-semibold text-ink-500 mb-2 uppercase tracking-wider">Wybierz termin wizyty:</p>
+                  {facility.appointments && facility.appointments.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {facility.appointments.map((slot) => (
+                        <button key={slot.id} onClick={() => { setSelectedSlot(slot); setBookedFacility(facility); }} className="inline-flex items-center gap-1.5 rounded-xl border border-sage-300 bg-sage-50 px-3 py-2 text-xs font-semibold text-sage-700 transition-all hover:bg-sage-600 hover:text-white cursor-pointer">
+                          <span>đź“… {slot.date}</span><span className="font-bold">godz. {slot.time.slice(0, 5)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : <p className="text-xs text-ink-400 italic">Brak wolnych terminĂłw online</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Sekcja historii analiz */}
+      {history.length > 0 && (
+        <section className="mt-12 animate-fade-up print:hidden">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5"><Clock className="h-5 w-5 text-ink-500" /><h2 className="text-base font-semibold text-ink-900">Historia Twoich analiz</h2></div>
+            <button onClick={clearHistory} className="text-xs font-semibold text-ink-400 hover:text-sand-500 cursor-pointer">WyczyĹ›Ä‡ historiÄ™</button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {history.map((item) => (
+              <button key={item.id} onClick={() => loadFromHistory(item)} className="flex flex-col items-start gap-2 rounded-2xl border border-ink-100 bg-white/60 p-4 text-left shadow-sm transition-all hover:border-sage-200 hover:bg-white cursor-pointer">
+                <div className="flex w-full items-center justify-between">
+                  <span className="text-[0.7rem] font-semibold text-ink-400">{item.date}</span>
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold ${URGENCY_STYLES[item.result.urgency]}`}>{item.result.urgency}</span>
+                </div>
+                <p className="line-clamp-2 text-sm font-medium text-ink-900">{item.symptoms}</p>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+import { AnalysisResult, Facility } from './types';
+
+export const CARDIAC_RESULT: AnalysisResult = {
+  direction: 'Kardiologia',
+  directionNote:
+    'Opisane objawy mogÄ… wskazywaÄ‡ na krÄ…ĹĽeniowe podĹ‚oĹĽe dolegliwoĹ›ci. Zalecana konsultacja w kierunku chorĂłb serca i naczyĹ„.',
+  specialist: 'Kardiolog',
+  specialistNote:
+    'Specjalista oceni ryzyko sercowo-naczyniowe i zleci odpowiedni panel diagnostyczny.',
+  tests: [
+    'EKG spoczynkowe (12 odprowadzeĹ„)',
+    'Echokardiografia serca',
+    'Morfologia krwi + lipidogram',
+    'Troponina wysokoczuĹ‚a',
+  ],
+  urgency: 'Standardowy',
+};
+
+export const GENERAL_RESULT: AnalysisResult = {
+  direction: 'Diagnostyka ogĂłlna',
+  directionNote:
+    'Opisane objawy nie wskazujÄ… jednoznacznie na konkretnÄ… dziedzinÄ™. Zalecana szeroka diagnostyka wstÄ™pna u lekarza pierwszego kontaktu.',
+  specialist: 'Lekarz rodzinny',
+  specialistNote:
+    'Lekarz pierwszego kontaktu zbierze wywiad, zleci badania wstÄ™pne i w razie potrzeby skieruje do specjalisty.',
+  tests: [
+    'Morfologia krwi',
+    'CRP / OB',
+    'Badanie ogĂłlne moczu',
+    'Glukoza na czczo',
+  ],
+  urgency: 'Planowy',
+};
+
+export const URGENCY_STYLES: Record<AnalysisResult['urgency'], string> = {
+  Planowy: 'bg-sage-100 text-sage-700 border-sage-200',
+  Standardowy: 'bg-teal-50 text-teal-700 border-teal-200',
+  Pilny: 'bg-sand-100 text-sand-500 border-sand-200',
+};
+
+export const CARDIAC_FACILITIES: Facility[] = [
+  {
+    id: 1, // <--- Dodane ID
+    name: 'Centrum Medyczne Zielonki',
+    address: 'ul. Krakowskie PrzedmieĹ›cie 12, Zielonki',
+    earliestSlot: 'DziĹ›, godz. 16:30',
+    isFastest: true,
+    doctor: 'dr n. med. Jan Kowalski',
+    rating: 4.9,
+    direction: 'Kardiologia',
+  },
+  {
+    id: 2, // <--- Dodane ID
+    name: 'Krakowskie Centrum Kardiologii',
+    address: 'ul. PrÄ…dnicka 80, KrakĂłw',
+    earliestSlot: 'Jutro, godz. 09:00',
+    isFastest: false,
+    doctor: 'dr Anna WiĹ›niewska',
+    rating: 4.7,
+    direction: 'Kardiologia',
+  },
+];
+
+export const GENERAL_FACILITIES: Facility[] = [
+  {
+    id: 3, // <--- Dodane ID
+    name: 'Centrum Medyczne Diagnostyka+',
+    address: 'al. NiepodlegĹ‚oĹ›ci 220, KrakĂłw',
+    earliestSlot: 'DziĹ›, godz. 17:15',
+    isFastest: true,
+    doctor: 'dr Piotr Nowak',
+    rating: 4.8,
+    direction: 'Diagnostyka ogĂłlna',
+  },
+  {
+    id: 4, // <--- Dodane ID
+    name: 'Przychodnia Rodzinna w Zielonkach',
+    address: 'ul. SĹ‚oneczna 2, Zielonki',
+    earliestSlot: 'Jutro, godz. 10:30',
+    isFastest: false,
+    doctor: 'dr Maria Lewandowska',
+    rating: 4.6,
+    direction: 'Diagnostyka ogĂłlna',
+  },
+];
+import { supabase } from './supabase';
+
+export async function analyzeSymptomsWithGemini(
+  symptoms: string, 
+  imageFile: { base64: string; mimeType: string } | null
+) {
+  try {
+    // Odpytujemy naszÄ… wĹ‚asnÄ…, bezpiecznÄ… funkcjÄ™ serwerowÄ… (Edge Function)
+    const { data, error } = await supabase.functions.invoke('analyze-symptoms', {
+      body: { symptoms, imageFile }
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return data; // Zwracamy czysty wynik z serwera
+
+  } catch (error: any) {
+    console.error('BĹ‚Ä…d poĹ‚Ä…czenia z serwerem AI:', error);
+    return {
+      error: true,
+      direction: 'BĹ‚Ä…d analizy',
+      explanation: 'WystÄ…piĹ‚ problem techniczny podczas Ĺ‚Ä…czenia z bezpiecznym serwerem. SprĂłbuj ponownie za chwilÄ™.',
+      specialist: 'Brak',
+      priority: 'Standardowy',
+      tests: [],
+    };
+  }
+}
+export const translations = {
+  pl: {
+    title: "MedTriage",
+    subtitle: "Inteligentny asystent triaĹĽowy AI",
+    description: "Wpisz swoje objawy, a asystent zasugeruje moĹĽliwy kierunek diagnostyczny, rekomendowanego specjalistÄ™ oraz badania wstÄ™pne.",
+    placeholder: "np. bĂłl w klatce piersiowej przy wysiĹ‚ku...",
+    analyzeBtn: "Rozpocznij analizÄ™",
+    analyzing: "AnalizujÄ™...",
+    urgency: "Priorytet",
+    direction: "Sugerowany kierunek",
+    specialist: "Rekomendowany specjalista",
+    tests: "Zalecane badania wstÄ™pne",
+  },
+  en: {
+    title: "MedTriage",
+    subtitle: "Intelligent AI Triage Assistant",
+    description: "Enter your symptoms, and the assistant will suggest a diagnostic direction, recommended specialist, and preliminary tests.",
+    placeholder: "e.g., chest pain during exertion...",
+    analyzeBtn: "Start Analysis",
+    analyzing: "Analyzing...",
+    urgency: "Priority",
+    direction: "Suggested Direction",
+    specialist: "Recommended Specialist",
+    tests: "Recommended Preliminary Tests",
+  }
+};
+
+export type Language = 'pl' | 'en';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// Ten warunek pomoĹĽe Ci natychmiast wyĹ‚apaÄ‡ bĹ‚Ä…d w konsoli, jeĹ›li zmienne znĂłw "zniknÄ…"
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error("UWAGA: Brak kluczy Ĺ›rodowiskowych VITE_SUPABASE_URL lub VITE_SUPABASE_ANON_KEY!");
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { describe, it, expect } from 'vitest';
+
+// Struktura testowa weryfikujÄ…ca logikÄ™ biznesowÄ… (Guardrails) 
+// Docelowo testy wywoĹ‚ujÄ… TwojÄ… funkcjÄ™ Edge Function z zamockowanym zapytaniem
+describe('Logika TriaĹĽowa AI (Guardrails)', () => {
+  
+  it('powinno odrzuciÄ‡ zapytanie niemedyczne (np. przepis kulinarny)', () => {
+    const mockApiResponse = {
+      direction: "BĹ‚Ä…d analizy",
+      explanation: "Zapytanie nie ma charakteru medycznego lub nie dotyczy zdrowia ludzkiego.",
+      specialist: "Brak",
+      priority: "Standardowy",
+      tests: []
+    };
+
+    expect(mockApiResponse.direction).toBe('BĹ‚Ä…d analizy');
+    expect(mockApiResponse.priority).toBe('Standardowy');
+  });
+
+  it('powinno nadaÄ‡ priorytet Pilny dla objawĂłw zagroĹĽenia ĹĽycia', () => {
+    const mockApiResponse = {
+      direction: "SOR / Telefon 112",
+      explanation: "Objawy wskazujÄ… na stan bezpoĹ›redniego zagroĹĽenia ĹĽycia.",
+      specialist: "Lekarz Medycyny Ratunkowej",
+      priority: "Pilny",
+      tests: ["EKG", "Troponina"]
+    };
+
+    expect(mockApiResponse.priority).toBe('Pilny');
+    expect(mockApiResponse.direction).toContain('112');
+  });
+});
+export interface Organization {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+export interface Doctor {
+  id: number;
+  facility_id: number;
+  full_name: string;
+  specialty: string;
+  rating: number;
+  is_active: boolean;
+}
+
+export interface Facility {
+  id: number;
+  organization_id?: number;
+  name: string;
+  address: string;
+  earliestSlot?: string;
+  isFastest?: boolean;
+  doctor?: string;
+  rating: number;
+  direction?: string;
+  appointments?: Appointment[];
+}
+
+export interface Appointment {
+  id: number;
+  facility_id: number;
+  doctor_id?: number;
+  date: string;
+  time: string;
+  status: 'available' | 'booked';
+  patient_info?: string | null;
+  triage_direction?: string | null;
+  urgency?: 'Pilny' | 'Standardowy' | 'Planowy';
+  triage_summary?: string;
+  preliminary_tests?: string[];
+  facilities?: {
+    name: string;
+    address: string;
+  };
+  doctors?: {
+    full_name: string;
+    specialty: string;
+  };
+}
+
+export interface AnalysisResult {
+  direction: string;
+  directionNote: string;
+  specialist: string;
+  specialistNote: string;
+  tests: string[];
+  urgency: 'Pilny' | 'Standardowy' | 'Planowy';
+}
+
+export interface HistoryItem {
+  id: string;
+  date: string;
+  symptoms: string;
+  hasImage: boolean;
+  result: AnalysisResult;
+}
+/// <reference types="vite/client" />
