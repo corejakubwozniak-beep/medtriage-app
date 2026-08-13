@@ -237,38 +237,61 @@ function App() {
               </section>
             )}
 
-            {/* Dynamiczna Lista dostępnych placówek z bazy (Zastępuje Mocki) */}
+           {/* Dynamiczna Lista dostępnych placówek z bazy (Zastępuje Mocki) */}
             {result && !loading && (
-              <section className="mt-7 animate-fade-up">
-                <h2 className="text-base font-semibold text-ink-900 mb-4 flex items-center gap-2">
-                  <CalendarClock className="h-5 w-5 text-teal-600"/> Dostępne placówki i wolne terminy
-                </h2>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {facilities.map(fac => (
-                    <div key={fac.id} className="border border-ink-100 rounded-3xl p-5 bg-white shadow-card">
-                      <h3 className="font-bold text-ink-900">{fac.name}</h3>
-                      <p className="text-xs text-ink-500 mb-3">{fac.address}</p>
-                      
-                      {/* Filtrujemy tylko wolne sloty */}
-                      {fac.appointments && fac.appointments.filter(a => a.status === 'available').length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {fac.appointments.filter(a => a.status === 'available').map(slot => (
-                            <button 
-                              key={slot.id} 
-                              onClick={() => { setSelectedSlot(slot); setBookedFacility(fac); }}
-                              className="text-xs font-bold bg-sage-50 text-sage-700 border border-sage-200 px-3 py-2 rounded-xl hover:bg-sage-600 hover:text-white cursor-pointer"
-                            >
-                              📅 {slot.date} godz. {slot.time.slice(0, 5)}
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-ink-400 italic">Brak wolnych terminów online</p>
-                      )}
+              <>
+                {result.urgency === 'Pilny' ? (
+                  <section className="mt-7 animate-fade-in print:hidden">
+                    <div className="rounded-3xl border-2 border-red-500 bg-red-50 p-8 text-center shadow-lg">
+                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600 mb-4">
+                        <ShieldCheck className="h-8 w-8" />
+                      </div>
+                      <h2 className="text-2xl font-bold text-red-900 mb-2">WYMAGANA NATYCHMIASTOWA POMOC</h2>
+                      <p className="text-red-800 font-medium mb-6">
+                        Twoje objawy wskazują na stan zagrożenia życia. <strong>Nie rezerwuj wizyty w przychodni.</strong>
+                      </p>
+                      <a 
+                        href="tel:112" 
+                        className="inline-block bg-red-600 text-white font-bold py-4 px-8 rounded-2xl text-xl hover:bg-red-700 transition-all shadow-md"
+                      >
+                        ZADZWOŃ POD 112
+                      </a>
+                      <p className="mt-4 text-sm text-red-700 underline">Udaj się na najbliższy Szpitalny Oddział Ratunkowy (SOR)</p>
                     </div>
-                  ))}
-                </div>
-              </section>
+                  </section>
+                ) : (
+                  <section className="mt-7 animate-fade-up">
+                    <h2 className="text-base font-semibold text-ink-900 mb-4 flex items-center gap-2">
+                      <CalendarClock className="h-5 w-5 text-teal-600"/> Dostępne placówki i wolne terminy
+                    </h2>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {facilities.map(fac => (
+                        <div key={fac.id} className="border border-ink-100 rounded-3xl p-5 bg-white shadow-card">
+                          <h3 className="font-bold text-ink-900">{fac.name}</h3>
+                          <p className="text-xs text-ink-500 mb-3">{fac.address}</p>
+                          
+                          {/* Filtrujemy tylko wolne sloty */}
+                          {fac.appointments && fac.appointments.filter(a => a.status === 'available').length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {fac.appointments.filter(a => a.status === 'available').map(slot => (
+                                <button 
+                                  key={slot.id} 
+                                  onClick={() => { setSelectedSlot(slot); setBookedFacility(fac); }}
+                                  className="text-xs font-bold bg-sage-50 text-sage-700 border border-sage-200 px-3 py-2 rounded-xl hover:bg-sage-600 hover:text-white cursor-pointer"
+                                >
+                                  📅 {slot.date} godz. {slot.time.slice(0, 5)}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-ink-400 italic">Brak wolnych terminów online</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
             )}
           </>
         )}
