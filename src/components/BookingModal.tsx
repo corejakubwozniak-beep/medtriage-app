@@ -63,7 +63,7 @@ export default function BookingModal({
         .select();
 
       if (appError || !updatedSlots?.length) {
-        throw new Error('Błąd rezerwacji (termin może być już zajęty)');
+        throw new Error('Błąd rezerwacji w bazie danych');
       }
 
       showToast('Wizyta zarezerwowana pomyślnie!');
