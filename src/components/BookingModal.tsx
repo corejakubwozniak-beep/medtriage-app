@@ -27,59 +27,62 @@ export default function BookingModal({
   if (!bookedFacility || !selectedSlot) return null;
 
   const handleBookingConfirm = async () => {
-    const phoneRegex = /^(\+48)?\s?\d{3}\s?\d{3}\s?\d{3}$/;
+  if (!patientName.trim() || !patientPhone.trim() || !rodoAccepted) {
+    showToast('Uzupełnij imię, nazwisko, telefon i zaakceptuj RODO', 'error');
+    return;
+  }
+
+  try {
+    // 1. Zapisz dane do patients_registry
+    const encodedContactData = btoa(encodeURIComponent(`${patientName}|${patientPhone}`));
+    const maskedPhone = `***-***-${patientPhone.slice(-3)}`;
+
+    const { data: patientData, error: patientError } = await supabase
+      .from('patients_registry')
+      .insert({
+        masked_phone_hash: maskedPhone,
+        encrypted_contact_data: encodedContactData
+      })
+      .select('id')
+      .single();
+
+    if (patientError || !patientData) throw patientError;
+
+    // 2. Warunkowa aktualizacja – dodajemy .eq('status', 'available')
+    // Zapytanie wykona się TYLKO wtedy, gdy slot w bazie jest NADAL wolny!
+    const { data: updatedSlots, error: appError } = await supabase
+      .from('appointments')
+      .update({ 
+        status: 'booked', 
+        patient_uuid: patientData.id, 
+        triage_direction: result?.specialist, 
+        urgency: result?.urgency, 
+        preliminary_tests: result?.tests 
+      })
+      .eq('id', selectedSlot.id)
+      .eq('status', 'available') // <--- KKLUCZOWA POPRAWKA ATOMOWA
+      .select();
+
+    if (appError) {
+      console.error("Szczegóły błędu Supabase:", appError);
+      throw new Error(`Błąd bazy: ${appError.message}`);
+    }
     
-    if (!patientName.trim() || !patientPhone.trim() || !rodoAccepted) {
-      showToast('Uzupełnij imię, nazwisko, telefon i zaakceptuj RODO', 'error');
+    // Jeśli zero wierszy zostało zaktualizowanych, oznacza to, że ktoś zajął termin ułamek sekundy wcześniej
+    if (!updatedSlots || updatedSlots.length === 0) {
+      showToast('Niestety, ten termin został przed chwilą zajęty przez innego pacjenta!', 'error');
+      onClose(); // Zamykamy modal
+      fetchFacilities(); // Odświeżamy listę, aby zająć/usunąć ten slot z widoku pacjenta
       return;
     }
 
-    try {
-      // 1. Zapisz dane do patients_registry
-      const encodedContactData = btoa(encodeURIComponent(`${patientName}|${patientPhone}`));
-      const maskedPhone = `***-***-${patientPhone.slice(-3)}`;
-
-      const { data: patientData, error: patientError } = await supabase
-        .from('patients_registry')
-        .insert({
-          masked_phone_hash: maskedPhone,
-          encrypted_contact_data: encodedContactData
-        })
-        .select('id')
-        .single();
-
-      if (patientError || !patientData) throw patientError;
-
-      // 2. Zaktualizuj wizytę po samym ID (bez rygorystycznego filtra statusu)
-      const { data: updatedSlots, error: appError } = await supabase
-        .from('appointments')
-        .update({ 
-          status: 'booked', 
-          patient_uuid: patientData.id, 
-          triage_direction: result?.specialist, 
-          urgency: result?.urgency, 
-          preliminary_tests: result?.tests 
-        })
-        .eq('id', selectedSlot.id)
-        .select();
-
-      // --- ZMIENIONY FRAGMENT Z OBSŁUGĄ BŁĘDÓW ---
-      if (appError) {
-        console.error("Szczegóły błędu Supabase:", appError);
-        throw new Error(`Błąd bazy: ${appError.message}`);
-      }
-      
-      if (!updatedSlots || updatedSlots.length === 0) {
-        throw new Error('Nie znaleziono terminu o tym ID.');
-      }
-
-      showToast('Wizyta zarezerwowana pomyślnie!');
-      onClose();
-      fetchFacilities();
-    } catch (err: any) {
-      showToast(err.message || 'Wystąpił błąd podczas rezerwacji', 'error');
-    }
-  };
+    showToast('Wizyta zarezerwowana pomyślnie!', 'success');
+    onClose();
+    fetchFacilities();
+  } catch (err: any) {
+    showToast(err.message || 'Wystąpił błąd podczas rezerwacji', 'error');
+  }
+};
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-5 backdrop-blur-sm animate-fade-in print:hidden" onClick={onClose}>
       <div className="relative w-full max-w-md rounded-3xl border border-ink-100 bg-white p-7 shadow-card animate-fade-up" onClick={(e) => e.stopPropagation()}>
